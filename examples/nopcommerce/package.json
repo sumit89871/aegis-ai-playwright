@@ -1,0 +1,35 @@
+{
+  "name": "@aegis/example-nopcommerce",
+  "version": "0.1.0",
+  "private": true,
+  "description": "nopCommerce reference consumer for the AegisAI Playwright platform.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.22.0 <27"
+  },
+  "scripts": {
+    "setup": "playwright install",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "node --test --experimental-strip-types tests/unit/currency.unit.ts",
+    "test:smoke": "playwright test tests/smoke --project=chromium",
+    "test:cross-browser": "playwright test tests/smoke",
+    "test:headed": "playwright test tests/smoke --project=chromium --headed",
+    "test:ui": "playwright test tests/smoke --project=chromium --ui",
+    "report": "playwright show-report playwright-report",
+    "infra:pull": "docker compose --env-file infrastructure/.env -f infrastructure/compose.yml pull",
+    "infra:up": "docker compose --env-file infrastructure/.env -f infrastructure/compose.yml up --detach",
+    "infra:down": "docker compose --env-file infrastructure/.env -f infrastructure/compose.yml down --remove-orphans",
+    "infra:status": "powershell -NoProfile -ExecutionPolicy Bypass -File infrastructure/scripts/show-status.ps1",
+    "infra:wait": "powershell -NoProfile -ExecutionPolicy Bypass -File infrastructure/scripts/wait-for-store.ps1",
+    "infra:logs": "docker compose --env-file infrastructure/.env -f infrastructure/compose.yml logs --follow nopcommerce-web nopcommerce-db",
+    "infra:restart": "docker compose --env-file infrastructure/.env -f infrastructure/compose.yml restart",
+    "infra:reset": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Write-Warning 'DESTRUCTIVE RESET: removing nopCommerce containers, network, and all named data volumes'; docker compose --env-file 'infrastructure/.env' -f 'infrastructure/compose.yml' down --volumes --remove-orphans\""
+  },
+  "dependencies": {
+    "@aegis/core": "0.1.0",
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}

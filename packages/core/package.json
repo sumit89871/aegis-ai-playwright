@@ -1,0 +1,21 @@
+{
+  "name": "@aegis/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Application-independent deterministic foundations for AegisAI consumer projects.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.22.0 <27"
+  },
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "node --test --experimental-strip-types tests/environment.unit.ts"
+  }
+}

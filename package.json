@@ -1,0 +1,43 @@
+{
+  "name": "aegis-ai-playwright",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Deterministic Playwright foundation for the AegisAI Playwright Quality Platform.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "engines": {
+    "node": ">=22.22.0 <27"
+  },
+  "scripts": {
+    "setup": "npm run setup --workspace=@aegis/example-nopcommerce",
+    "lint": "eslint packages/core examples/nopcommerce",
+    "lint:fix": "eslint packages/core examples/nopcommerce --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test:unit": "npm run test:unit --workspaces --if-present",
+    "validate": "npm run format:check && npm run lint && npm run typecheck && npm run test:unit",
+    "nopcommerce:test:smoke": "npm run test:smoke --workspace=@aegis/example-nopcommerce",
+    "nopcommerce:test:cross-browser": "npm run test:cross-browser --workspace=@aegis/example-nopcommerce",
+    "nopcommerce:infra:pull": "npm run infra:pull --workspace=@aegis/example-nopcommerce",
+    "nopcommerce:infra:up": "npm run infra:up --workspace=@aegis/example-nopcommerce",
+    "nopcommerce:infra:down": "npm run infra:down --workspace=@aegis/example-nopcommerce",
+    "nopcommerce:infra:status": "npm run infra:status --workspace=@aegis/example-nopcommerce",
+    "nopcommerce:infra:wait": "npm run infra:wait --workspace=@aegis/example-nopcommerce",
+    "nopcommerce:infra:logs": "npm run infra:logs --workspace=@aegis/example-nopcommerce",
+    "nopcommerce:infra:restart": "npm run infra:restart --workspace=@aegis/example-nopcommerce",
+    "nopcommerce:infra:reset": "npm run infra:reset --workspace=@aegis/example-nopcommerce"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.0.0",
+    "eslint": "^10.7.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.65.0"
+  }
+}

@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Local environment files (keep the documented template)
+.env
+.env.*
+!.env.example
+examples/nopcommerce/.env
+examples/nopcommerce/infrastructure/.env
+
+# Playwright output and evidence
+playwright-report/
+test-results/
+blob-report/
+traces/
+videos/
+screenshots/
+*.zip
+
+# Test and tool caches
+coverage/
+.eslintcache
+*.tsbuildinfo
+.cache/
+tmp/
+temp/
+*.tmp
+*.log
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Operating systems
+.DS_Store
+Thumbs.db
+Desktop.ini
