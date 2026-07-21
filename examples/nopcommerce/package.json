@@ -21,6 +21,7 @@
     "infra:down": "docker compose --env-file infrastructure/.env -f infrastructure/compose.yml down --remove-orphans",
     "infra:status": "powershell -NoProfile -ExecutionPolicy Bypass -File infrastructure/scripts/show-status.ps1",
     "infra:wait": "powershell -NoProfile -ExecutionPolicy Bypass -File infrastructure/scripts/wait-for-store.ps1",
+    "infra:verify-db": "powershell -NoProfile -ExecutionPolicy Bypass -File infrastructure/scripts/verify-database.ps1",
     "infra:logs": "docker compose --env-file infrastructure/.env -f infrastructure/compose.yml logs --follow nopcommerce-web nopcommerce-db",
     "infra:restart": "docker compose --env-file infrastructure/.env -f infrastructure/compose.yml restart",
     "infra:reset": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Write-Warning 'DESTRUCTIVE RESET: removing nopCommerce containers, network, and all named data volumes'; docker compose --env-file 'infrastructure/.env' -f 'infrastructure/compose.yml' down --volumes --remove-orphans\""

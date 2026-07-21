@@ -27,6 +27,7 @@
     "nopcommerce:infra:down": "npm run infra:down --workspace=@aegis/example-nopcommerce",
     "nopcommerce:infra:status": "npm run infra:status --workspace=@aegis/example-nopcommerce",
     "nopcommerce:infra:wait": "npm run infra:wait --workspace=@aegis/example-nopcommerce",
+    "nopcommerce:infra:verify-db": "npm run infra:verify-db --workspace=@aegis/example-nopcommerce",
     "nopcommerce:infra:logs": "npm run infra:logs --workspace=@aegis/example-nopcommerce",
     "nopcommerce:infra:restart": "npm run infra:restart --workspace=@aegis/example-nopcommerce",
     "nopcommerce:infra:reset": "npm run infra:reset --workspace=@aegis/example-nopcommerce"

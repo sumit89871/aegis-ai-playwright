@@ -21,6 +21,7 @@ services:
       start_period: 10s
     volumes:
       - nopcommerce_db_data:/var/lib/postgresql/data
+      - ./postgres-init/001-enable-citext.sql:/docker-entrypoint-initdb.d/001-enable-citext.sql:ro
     networks:
       - nopcommerce_private
 

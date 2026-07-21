@@ -12,6 +12,20 @@ This stack provides a reproducible local nopCommerce 4.90.6 installation backed 
 
 The whole `/app` directory is deliberately not mounted because doing so would hide the application binaries supplied by the pinned image.
 
+## PostgreSQL citext initialization
+
+nopCommerce requires PostgreSQL's `citext` extension for case-insensitive text columns. The extension must exist before FluentMigrator creates its migration metadata and application schema.
+
+The PostgreSQL image executes files in `/docker-entrypoint-initdb.d` only while creating a brand-new, empty database volume. Adding an initialization script does not change a database volume that PostgreSQL has already initialized. Therefore, an existing incomplete installation created without `citext` requires one full local reset before retrying the installer.
+
+The reset is deliberately limited to these local nopCommerce volumes:
+
+- PostgreSQL data in `aegis-nopcommerce-db-data`
+- nopCommerce `App_Data` in `aegis-nopcommerce-app-data`
+- nopCommerce product images in `aegis-nopcommerce-product-images`
+
+It does not delete source code, Git history, repository files, or unrelated Docker images and volumes. After the reset and recreation, run `npm run nopcommerce:infra:verify-db` before submitting the installer.
+
 ## Initial preparation
 
 From the repository root:
@@ -43,15 +57,16 @@ This milestone does not automate or submit the installation form.
 
 ## Operations
 
-| Command                             | Purpose                                                                            |
-| ----------------------------------- | ---------------------------------------------------------------------------------- |
-| `npm run nopcommerce:infra:pull`    | Pull the pinned application and database images.                                   |
-| `npm run nopcommerce:infra:up`      | Start both services in the background.                                             |
-| `npm run nopcommerce:infra:down`    | Stop and remove containers and the Compose network while preserving named volumes. |
-| `npm run nopcommerce:infra:status`  | Show service state and health.                                                     |
-| `npm run nopcommerce:infra:logs`    | Follow logs for both services.                                                     |
-| `npm run nopcommerce:infra:wait`    | Wait for an HTTP response from the configured local port.                          |
-| `npm run nopcommerce:infra:restart` | Restart services without deleting data.                                            |
-| `npm run nopcommerce:infra:reset`   | **Destructively remove containers and all named data volumes.**                    |
+| Command                               | Purpose                                                                            |
+| ------------------------------------- | ---------------------------------------------------------------------------------- |
+| `npm run nopcommerce:infra:pull`      | Pull the pinned application and database images.                                   |
+| `npm run nopcommerce:infra:up`        | Start both services in the background.                                             |
+| `npm run nopcommerce:infra:down`      | Stop and remove containers and the Compose network while preserving named volumes. |
+| `npm run nopcommerce:infra:status`    | Show service state and health.                                                     |
+| `npm run nopcommerce:infra:logs`      | Follow logs for both services.                                                     |
+| `npm run nopcommerce:infra:wait`      | Wait for an HTTP response from the configured local port.                          |
+| `npm run nopcommerce:infra:verify-db` | Verify `citext` and report the public application table count.                     |
+| `npm run nopcommerce:infra:restart`   | Restart services without deleting data.                                            |
+| `npm run nopcommerce:infra:reset`     | **Destructively remove containers and all named data volumes.**                    |
 
 `nopcommerce:infra:down` is safe for routine shutdown because application and database data remain in named volumes. `nopcommerce:infra:reset` permanently deletes the local database, installer state, and persisted images, returning the stack to an uninstalled state. Run reset only when complete local data deletion is explicitly intended.
