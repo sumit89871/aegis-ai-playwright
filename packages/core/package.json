@@ -16,9 +16,12 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test:unit": "node --test --experimental-strip-types tests/environment.unit.ts tests/redaction.unit.ts tests/browser-diagnostics.unit.ts tests/test-metadata.unit.ts tests/framework-doctor.unit.ts tests/browser-doctor.unit.ts tests/application-profile.unit.ts tests/application-preflight.unit.ts"
+    "test:unit": "node --test --experimental-strip-types tests/environment.unit.ts tests/redaction.unit.ts tests/browser-diagnostics.unit.ts tests/test-metadata.unit.ts tests/framework-doctor.unit.ts tests/browser-doctor.unit.ts tests/application-profile.unit.ts tests/application-preflight.unit.ts tests/page-readiness.unit.ts tests/accessibility.unit.ts"
   },
   "peerDependencies": {
     "@playwright/test": "^1.61.1"
+  },
+  "dependencies": {
+    "@axe-core/playwright": "^4.12.1"
   }
 }

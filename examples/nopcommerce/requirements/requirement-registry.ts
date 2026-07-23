@@ -1,6 +1,14 @@
 import { defineRequirementMetadata } from "@aegis/core";
 import type { RequirementMetadata } from "@aegis/core";
 
+export const accessibilityRequirement = defineRequirementMetadata({
+  requirementId: "REQ-A11Y-001",
+  title: "Storefront home-page accessibility",
+  documentPath: "requirements/REQ-A11Y-001.md",
+  feature: "accessibility",
+  status: "active",
+});
+
 export const productSearchRequirement = defineRequirementMetadata({
   requirementId: "REQ-SEARCH-001",
   title: "Product catalogue search",
@@ -18,4 +26,8 @@ export const shoppingCartRequirement = defineRequirementMetadata({
 });
 
 export const nopCommerceRequirementRegistry: readonly RequirementMetadata[] =
-  Object.freeze([shoppingCartRequirement, productSearchRequirement]);
+  Object.freeze([
+    accessibilityRequirement,
+    shoppingCartRequirement,
+    productSearchRequirement,
+  ]);

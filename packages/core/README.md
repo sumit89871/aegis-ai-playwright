@@ -12,6 +12,8 @@
 - Pure framework-doctor evaluation, deterministic summaries, and rendering
 - Generic, serializable application profiles with runtime validation
 - Bounded HTTP and optional single-browser application preflight checks
+- Serializable page-readiness definitions and web-first readiness execution
+- Sanitized, bounded accessibility scanning with configurable impact policy
 - Reusable deterministic utilities with at least one real consumer
 - Named package exports that do not depend on a specific application
 
@@ -37,6 +39,14 @@ Core exposes pure doctor evaluation functions that accept injected version, file
 `runApplicationPreflight()` validates the profile, performs a body-free HTTP reachability check, and optionally opens the application with one selected Playwright browser. It returns sanitized serializable results; rendering and process exit behavior remain separate. Consumer infrastructure, credentials, selectors, database details, and business data never belong in this model.
 
 Dependency direction is always from a consumer to `@aegis/core`. Core must never import consumer code.
+
+## Generic UI quality APIs
+
+`definePageReadiness` validates a consumer-owned readiness contract, and `waitForPageReady` evaluates it with Playwright web-first expectations. Definitions can describe URL, title, landmark, heading, test-ID, and loading-indicator evidence without storing Page objects in results.
+
+`runAccessibilityScan` uses the maintained `@axe-core/playwright` adapter. Core retains bounded rule metadata, sanitized selectors, and failure summaries, never full HTML or form values. `assertAccessibilityPolicy` applies the configurable default: critical and serious fail, moderate warns, and minor is informational. A rule exclusion is invalid without an explicit reason and scope.
+
+Application selectors, titles, readiness landmarks, WCAG scope, and justified exclusions stay in the consumer. Static repository locator scanning is tooling because it depends on the TypeScript compiler API; its rules are documented in the [UI quality policy](../../docs/ui-quality.md).
 
 ## Test metadata contract
 

@@ -13,7 +13,6 @@ function listTests(grep?: string): string {
   const arguments_ = [
     playwrightCli,
     "test",
-    "tests/smoke",
     "--project=chromium",
     "--list",
     ...(grep === undefined ? [] : ["--grep", grep]),

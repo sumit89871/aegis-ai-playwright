@@ -3,7 +3,12 @@ import { writeFile } from "node:fs/promises";
 import {
   createBrowserDiagnosticsCollector,
   redactSensitiveText,
+  runAccessibilityScan,
   sanitizeUrl,
+} from "@aegis/core";
+import type {
+  AccessibilityScanOptions,
+  AccessibilityScanResult,
 } from "@aegis/core";
 import { test as base } from "@playwright/test";
 import type { TestInfo } from "@playwright/test";
@@ -13,17 +18,26 @@ import { environment } from "../config/environment";
 import { AddProductToCartFlow } from "../flows/add-product-to-cart.flow.ts";
 import { ProductSearchFlow } from "../flows/product-search.flow";
 import { ProductDetailsPage } from "../pages/product-details.page.ts";
+import { HomePage } from "../pages/home.page.ts";
 import { SearchResultsPage } from "../pages/search-results.page";
 import { ShoppingCartPage } from "../pages/shopping-cart.page.ts";
 
 interface AegisFixtures {
+  readonly accessibility: AccessibilityFixture;
   readonly header: HeaderComponent;
   readonly browserDiagnostics: undefined;
   readonly addProductToCartFlow: AddProductToCartFlow;
   readonly productSearchFlow: ProductSearchFlow;
   readonly productDetailsPage: ProductDetailsPage;
+  readonly homePage: HomePage;
   readonly searchResultsPage: SearchResultsPage;
   readonly shoppingCartPage: ShoppingCartPage;
+}
+
+export interface AccessibilityFixture {
+  readonly scan: (
+    options?: AccessibilityScanOptions,
+  ) => Promise<AccessibilityScanResult>;
 }
 
 function addDiagnosticsWarning(testInfo: TestInfo, error: unknown): void {
@@ -129,6 +143,34 @@ export const test = base.extend<AegisFixtures>({
     },
     { auto: true },
   ],
+  accessibility: async ({ page }, use, testInfo) => {
+    await use({
+      scan: async (
+        options: AccessibilityScanOptions = {},
+      ): Promise<AccessibilityScanResult> => {
+        const result = await runAccessibilityScan(page, options);
+        const summary = Object.freeze({
+          targetUrl: result.targetUrl,
+          policy: result.policy,
+          exclusionsApplied: result.exclusionsApplied,
+          ...result.summary,
+        });
+
+        for (const [name, value] of [
+          ["accessibility-summary.json", summary],
+          ["accessibility-violations.json", result.violations],
+        ] as const) {
+          try {
+            await attachJson(testInfo, name, value);
+          } catch (error) {
+            addDiagnosticsWarning(testInfo, error);
+          }
+        }
+
+        return result;
+      },
+    });
+  },
   header: async ({ page }, use) => {
     await use(new HeaderComponent(page));
   },
@@ -137,6 +179,9 @@ export const test = base.extend<AegisFixtures>({
   },
   productDetailsPage: async ({ page }, use) => {
     await use(new ProductDetailsPage(page));
+  },
+  homePage: async ({ page }, use) => {
+    await use(new HomePage(page));
   },
   shoppingCartPage: async ({ page }, use) => {
     await use(new ShoppingCartPage(page));

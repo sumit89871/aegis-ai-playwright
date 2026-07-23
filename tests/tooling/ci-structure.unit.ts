@@ -47,6 +47,12 @@ await describe("GitHub Actions workflow structure", async () => {
       /nopcommerce|localhost|docker|postgres/iu,
     );
     assert.match(frameworkQuality, /npm run ci:framework/u);
+    const rootPackage = readFileSync(
+      new URL("package.json", repositoryRoot),
+      "utf8",
+    );
+    assert.match(rootPackage, /"ci:framework": "[^"]*npm run ui:policy/u);
+    assert.doesNotMatch(frameworkQuality, /test:accessibility/u);
   });
 
   await it("defines exactly the required browser matrix and artifacts", () => {

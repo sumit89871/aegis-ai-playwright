@@ -104,9 +104,10 @@ npm run lint
 npm run typecheck
 npm run test:unit
 npm run validate
+npm run ui:policy
 ```
 
-Root validation covers formatting, linting, all workspace TypeScript projects, and workspace unit tests. It intentionally excludes application browser tests.
+Root validation covers formatting, linting, all workspace TypeScript projects, and workspace unit tests. `ui:policy` is the deterministic static gate for forbidden sleeps, XPath, raw test selectors, and other locator-maintainability signals. It intentionally excludes application browser tests. The complete locator, readiness, suppression, and accessibility rules are in the [UI quality policy](docs/ui-quality.md).
 
 ## Continuous integration
 
@@ -122,7 +123,7 @@ CI uses `npm ci` rather than `npm install`, then runs setup with `--skip-browser
 
 The [framework workflow](.github/workflows/framework-ci.yml) contains four independently visible executions:
 
-- Framework quality validates installation consistency, core boundaries, formatting, lint, strict TypeScript, unit tests, and template integrity.
+- Framework quality validates installation consistency, core boundaries, formatting, lint, strict TypeScript, unit tests, template integrity, and the static UI policy. It launches no browser and contacts no application.
 - Chromium, Firefox, and WebKit matrix entries each install only their selected browser and navigate to a deterministic `data:` URL.
 - Each browser entry uploads its bounded JSON doctor result from `artifacts/browser-doctor` for seven days, even when the check fails.
 
@@ -132,7 +133,7 @@ The optional nopCommerce consumer has a separate, static [reference workflow](.g
 npm run ci:reference
 ```
 
-This typechecks the consumer integration, validates requirement traceability, asks Playwright to list the three registered smoke tests, and then filters the static listing by each catalogued structured test-ID tag. Discovery proves `TC-SEARCH-001`, `TC-SEARCH-002`, and `TC-CART-001` each map to exactly one test without launching a browser or contacting localhost.
+This typechecks the consumer integration, validates requirement traceability, asks Playwright to list the four registered tests, and then filters the static listing by each catalogued structured test-ID tag. Discovery proves `TC-SEARCH-001`, `TC-SEARCH-002`, `TC-CART-001`, and `TC-A11Y-001` each map to exactly one test without launching a browser or contacting localhost.
 
 Core CI does not require nopCommerce, Docker, PostgreSQL, application `.env` files, or any live URL. Reference-consumer CI also does not run nopCommerce. A live end-to-end workflow would require the consuming application to provision and install its own environment deterministically; that is deliberately a future consumer-owned milestone. This separation lets applications use AegisAI regardless of how—or whether—they use containers and databases.
 
@@ -169,6 +170,16 @@ npm run nopcommerce:traceability
 ```
 
 These `nopcommerce:*` commands are optional consumer commands, not AegisAI core prerequisites. `nopcommerce:preflight` uses the generic application contract and checks only profile validity, HTTP reachability, and one Chromium navigation. Docker and PostgreSQL remain covered separately by `nopcommerce:infra:status` and `nopcommerce:infra:verify-db`.
+
+The reference consumer also demonstrates an explicit Chromium accessibility suite:
+
+```text
+npm run nopcommerce:test:accessibility
+npm run nopcommerce:traceability
+npm run nopcommerce:report
+```
+
+The suite attaches sanitized axe evidence and fails on critical or serious findings. It remains consumer-owned and is not executed by generic framework CI, which has no live application to scan.
 
 Detailed setup and installer values are documented in the [example guide](examples/nopcommerce/README.md) and [infrastructure guide](examples/nopcommerce/infrastructure/README.md).
 

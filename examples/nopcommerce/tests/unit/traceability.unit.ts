@@ -49,6 +49,38 @@ await describe("nopCommerce traceability", async () => {
     );
   });
 
+  await it("validates TC-A11Y-001 metadata", () => {
+    const accessibilityMetadata = nopCommerceTestCatalog.find(
+      (metadata) => metadata.testId === "TC-A11Y-001",
+    );
+
+    assert.notEqual(accessibilityMetadata, undefined);
+    assert.equal(
+      validateTestMetadata(accessibilityMetadata).requirementIds[0],
+      "REQ-A11Y-001",
+    );
+  });
+
+  await it("registers REQ-A11Y-001 as an active covered requirement", async () => {
+    const report = await buildTraceabilityReport({
+      requirements: nopCommerceRequirementRegistry,
+      tests: nopCommerceTestCatalog,
+      workspaceRoot: WORKSPACE_ROOT,
+    });
+    const requirement = report.requirements.find(
+      (candidate) => candidate.requirementId === "REQ-A11Y-001",
+    );
+
+    if (requirement === undefined) {
+      throw new Error(
+        "REQ-A11Y-001 was not present in the traceability report.",
+      );
+    }
+    assert.equal(requirement.status, "active");
+    assert.equal(requirement.coverageState, "covered");
+    assert.deepEqual(requirement.linkedTestIds, ["TC-A11Y-001"]);
+  });
+
   await it("registers REQ-CART-001 as an active covered requirement", async () => {
     const report = await buildTraceabilityReport({
       requirements: nopCommerceRequirementRegistry,
@@ -151,20 +183,24 @@ await describe("nopCommerce traceability", async () => {
     });
 
     assert.deepEqual(report.summary, {
-      totalRegisteredRequirements: 2,
-      activeRequirements: 2,
-      coveredRequirements: 2,
+      totalRegisteredRequirements: 3,
+      activeRequirements: 3,
+      coveredRequirements: 3,
       uncoveredRequirements: 0,
-      totalRegisteredTests: 3,
+      totalRegisteredTests: 4,
       testsBySuite: {
-        smoke: 3,
+        smoke: 4,
         regression: 0,
         integration: 0,
         "end-to-end": 0,
       },
-      testsByRisk: { critical: 0, high: 2, medium: 1, low: 0 },
-      testsByLayer: { ui: 3, api: 0, database: 0, contract: 0 },
-      testsByFeature: { "product-search": 2, "shopping-cart": 1 },
+      testsByRisk: { critical: 0, high: 3, medium: 1, low: 0 },
+      testsByLayer: { ui: 4, api: 0, database: 0, contract: 0 },
+      testsByFeature: {
+        accessibility: 1,
+        "product-search": 2,
+        "shopping-cart": 1,
+      },
     });
     const searchRequirement = report.requirements.find(
       (requirement) => requirement.requirementId === "REQ-SEARCH-001",

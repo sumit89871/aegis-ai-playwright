@@ -1,3 +1,4 @@
+import { definePageReadiness, waitForPageReady } from "@aegis/core";
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
@@ -20,7 +21,7 @@ export class ProductDetailsPage {
   private readonly addToCartButton: Locator;
   private readonly addToCartConfirmation: Locator;
 
-  public constructor(page: Page) {
+  public constructor(private readonly page: Page) {
     const productDetails = page.locator(".product-essential");
     this.productName = productDetails.locator(".product-name");
     this.productPrice = productDetails.locator(".product-price");
@@ -36,7 +37,16 @@ export class ProductDetailsPage {
   }
 
   public async expectProductDisplayed(productName: string): Promise<void> {
+    await waitForPageReady(
+      this.page,
+      definePageReadiness({
+        id: "nopcommerce-product-details",
+        timeoutMs: 10_000,
+        visibleHeading: { name: productName, exact: true },
+      }),
+    );
     await expect(this.productName).toHaveText(productName);
+    await expect(this.addToCartButton).toBeVisible();
   }
 
   public async getProductDetails(): Promise<ProductDetailsSnapshot> {

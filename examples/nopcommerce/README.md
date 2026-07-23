@@ -57,6 +57,7 @@ The current browser coverage traces to:
 
 - [REQ-SEARCH-001](requirements/REQ-SEARCH-001.md): exact and partial catalogue searches should display **Build your own computer**.
 - [REQ-CART-001](requirements/REQ-CART-001.md): an available product can be added as one unit and reviewed with consistent cart pricing.
+- [REQ-A11Y-001](requirements/REQ-A11Y-001.md): the home page has no critical or serious findings within the selected automated WCAG rules.
 
 The catalog gives each automated check deterministic metadata:
 
@@ -68,6 +69,35 @@ The catalog gives each automated check deterministic metadata:
 - **Tags** expose those values to Playwright for selective execution.
 
 The exact-search test is `TC-SEARCH-001` (high risk), and the partial-search test is `TC-SEARCH-002` (medium risk). Both cover `REQ-SEARCH-001`.
+
+## UI readiness and locator quality
+
+Page Objects own both their locators and their readiness definitions. Search results, product details, the shopping cart, and the home page use generic `@aegis/core` readiness checks for meaningful URLs, headings, and titles. This avoids treating network idle or a fixed sleep as proof that the page is usable.
+
+Run the repository-wide static locator policy from the root:
+
+```text
+npm run ui:policy
+npm run ui:policy -- --json
+```
+
+Semantic locators are preferred. The remaining short CSS selectors are scoped inside pages/components and are surfaced as informational review items rather than hidden or automatically rejected.
+
+## Home-page accessibility
+
+`TC-A11Y-001` opens a fresh local home page, waits for its meaningful readiness contract, and evaluates WCAG 2.0/2.1 A and AA axe rules in Chromium. It is tagged `@smoke` for risk classification but runs as an independent accessibility quality suite, so the normal three-test business smoke command remains focused and unchanged.
+
+```text
+npm run nopcommerce:test:accessibility
+npm run nopcommerce:traceability
+npm run nopcommerce:report
+```
+
+Critical and serious findings fail the test. Moderate and minor findings remain visible in `accessibility-summary.json` and `accessibility-violations.json`. Attachments are bounded and sanitized: they retain rule/help information and limited selectors, not full HTML, input values, cookies, headers, or credentials. Normal failure screenshot, video, trace, and browser diagnostics remain available under `test-results`, which Git ignores.
+
+The current local sample storefront has a genuine serious `color-contrast` violation affecting 15 home-page nodes. The test intentionally remains red until the application theme is corrected or a product-owned, documented decision changes the requirement; no rule exclusion is configured.
+
+An automated scan finds common machine-detectable issues; it does not prove complete WCAG compliance. Keyboard, screen-reader, focus-order, zoom/reflow, content, and cognitive-usability checks still require manual testing. Generic CI does not run this live suite because nopCommerce is only an optional consumer.
 
 ## Shopping-cart journey
 

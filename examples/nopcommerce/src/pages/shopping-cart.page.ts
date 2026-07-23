@@ -1,3 +1,4 @@
+import { definePageReadiness, waitForPageReady } from "@aegis/core";
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
@@ -18,16 +19,19 @@ export interface ShoppingCartItem {
   readonly subtotalText: string;
 }
 
+const SHOPPING_CART_READINESS = definePageReadiness({
+  id: "nopcommerce-shopping-cart",
+  timeoutMs: 10_000,
+  url: { pathname: "/cart" },
+  visibleHeading: { name: "Shopping cart", exact: true },
+});
+
 export class ShoppingCartPage {
   private readonly pageRoot: Locator;
-  private readonly pageTitle: Locator;
   private readonly emptyCartMessage: Locator;
 
   public constructor(private readonly page: Page) {
     this.pageRoot = page.locator(".shopping-cart-page");
-    this.pageTitle = this.pageRoot
-      .locator(".page-title")
-      .getByText("Shopping cart", { exact: true });
     this.emptyCartMessage = this.pageRoot.getByText(
       "Your Shopping Cart is empty!",
       { exact: true },
@@ -35,8 +39,7 @@ export class ShoppingCartPage {
   }
 
   public async expectDisplayed(): Promise<void> {
-    await expect(this.page).toHaveURL(/\/cart(?:[?#].*)?$/u);
-    await expect(this.pageTitle).toBeVisible();
+    await waitForPageReady(this.page, SHOPPING_CART_READINESS);
   }
 
   public async expectEmpty(): Promise<void> {
