@@ -33,6 +33,8 @@ Client projects may eventually live in separate repositories and consume publish
 - Docker and Docker Compose for the reference example
 - Network access for dependencies, browsers, and pinned container images
 
+The repository pins Node.js `22.22.2` in `.nvmrc` for repeatable local and CI execution while retaining support for maintained Node 22, 24, and 26 releases through the broader package engine range.
+
 ## Clone-to-ready framework workflow
 
 These commands prepare and validate AegisAI itself without requiring nopCommerce, Docker, PostgreSQL, an application `.env`, or any running target application:
@@ -55,6 +57,15 @@ npm run validate
 - `npm run validate` runs formatting checks, linting, strict TypeScript checks, and unit tests.
 
 When piping doctor JSON to another tool, use `npm run --silent doctor -- --json` to suppress npm's command banner.
+
+The browser doctor still checks all three browsers by default. Select one browser, as the CI matrix does, with:
+
+```text
+npm run doctor:browsers -- --browser=chromium
+npm run doctor:browsers -- --browser=firefox
+npm run doctor:browsers -- --browser=webkit
+npm run doctor:browsers -- --browser=chromium --json
+```
 
 The managed Codex Windows sandbox may prevent Firefox's Gecko tab subprocess from starting even when Firefox is installed correctly. `doctor:browsers` reports that runtime failure honestly. The unchanged command passes in a normal non-administrator PowerShell session; no framework bypass is applied.
 
@@ -96,6 +107,34 @@ npm run validate
 ```
 
 Root validation covers formatting, linting, all workspace TypeScript projects, and workspace unit tests. It intentionally excludes application browser tests.
+
+## Continuous integration
+
+The local framework-quality command mirrors the required framework CI job after dependencies have been installed:
+
+```text
+npm install
+npm run setup
+npm run ci:framework
+```
+
+CI uses `npm ci` rather than `npm install`, then runs setup with `--skip-browsers` because browser installation belongs to the separate runtime matrix. In that browser-independent job, missing browser executables are reported by doctor as warnings; package alignment and every other required framework check remain strict.
+
+The [framework workflow](.github/workflows/framework-ci.yml) contains four independently visible executions:
+
+- Framework quality validates installation consistency, core boundaries, formatting, lint, strict TypeScript, unit tests, and template integrity.
+- Chromium, Firefox, and WebKit matrix entries each install only their selected browser and navigate to a deterministic `data:` URL.
+- Each browser entry uploads its bounded JSON doctor result from `artifacts/browser-doctor` for seven days, even when the check fails.
+
+The optional nopCommerce consumer has a separate, static [reference workflow](.github/workflows/reference-consumer-ci.yml). Run the same validation locally with:
+
+```text
+npm run ci:reference
+```
+
+This typechecks the consumer integration, validates requirement traceability, asks Playwright to list the three registered smoke tests, and then filters the static listing by each catalogued structured test-ID tag. Discovery proves `TC-SEARCH-001`, `TC-SEARCH-002`, and `TC-CART-001` each map to exactly one test without launching a browser or contacting localhost.
+
+Core CI does not require nopCommerce, Docker, PostgreSQL, application `.env` files, or any live URL. Reference-consumer CI also does not run nopCommerce. A live end-to-end workflow would require the consuming application to provision and install its own environment deterministically; that is deliberately a future consumer-owned milestone. This separation lets applications use AegisAI regardless of how—or whether—they use containers and databases.
 
 ## nopCommerce reference example
 

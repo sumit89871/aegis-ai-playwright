@@ -47,6 +47,25 @@ Framework setup and doctor commands validate AegisAI itself. They do not need a 
 
 Application infrastructure remains a third, separate concern. The nopCommerce example owns Docker and PostgreSQL checks; another company application may use neither. This prevents core from acquiring application installation logic, database types, container names, or business data.
 
+## Continuous-integration boundaries
+
+```mermaid
+flowchart LR
+    CORE[@aegis/core]
+    CONSUMER[Consumer workspace]
+    QUALITY[Framework quality<br/>doctor + static gates + unit tests]
+    BROWSERS[Browser runtime matrix<br/>Chromium + Firefox + WebKit]
+    REFERENCE[Reference consumer static checks<br/>traceability + test discovery]
+    LIVE[Consumer-owned live E2E<br/>future provisioning milestone]
+
+    QUALITY --> CORE
+    BROWSERS --> CORE
+    REFERENCE --> CONSUMER
+    LIVE -. not provisioned by core CI .-> CONSUMER
+```
+
+Framework quality needs only the locked npm workspaces. Browser runtime checks use a deterministic `data:` URL and install one browser per matrix entry. Reference-consumer validation loads nopCommerce configuration, metadata, and tests only far enough to validate traceability and discovery; it does not launch a browser or contact the application. Docker, PostgreSQL, application installation, and live smoke execution remain consumer-owned concerns.
+
 ## Why there is no BasePage
 
 A generic `BasePage` tends to collect unrelated navigation, waiting, selector, and assertion helpers. That inheritance hides dependencies and encourages broad abstractions with weak business meaning. Consumer projects instead use small composition-based objects that expose only behaviour owned by their page or component.

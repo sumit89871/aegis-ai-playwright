@@ -1,46 +1,53 @@
 import { chromium, firefox, webkit } from "playwright";
 import type { BrowserType } from "playwright";
-
-type StepResult = "PASS" | "FAIL" | "SKIP";
-
-interface BrowserDoctorResult {
-  readonly browser: string;
-  readonly launch: StepResult;
-  readonly context: StepResult;
-  readonly page: StepResult;
-  readonly navigation: StepResult;
-  readonly result: "PASS" | "FAIL";
-}
+import {
+  browserDoctorExitCode,
+  createBrowserDoctorResult,
+  parseBrowserDoctorArguments,
+  redactSensitiveText,
+  renderBrowserDoctor,
+  sanitizeBrowserDoctorError,
+  selectedBrowserNames,
+} from "@aegis/core";
+import type {
+  BrowserDoctorBrowser,
+  BrowserDoctorCheckResult,
+  BrowserDoctorStepStatus,
+} from "@aegis/core";
 
 async function checkBrowser(
-  name: string,
+  name: BrowserDoctorBrowser,
   browserType: BrowserType,
-): Promise<BrowserDoctorResult> {
-  let launch: StepResult = "SKIP";
-  let contextStatus: StepResult = "SKIP";
-  let pageStatus: StepResult = "SKIP";
-  let navigation: StepResult = "SKIP";
+): Promise<BrowserDoctorCheckResult> {
+  let launch: BrowserDoctorStepStatus = "skipped";
+  let contextStatus: BrowserDoctorStepStatus = "skipped";
+  let pageStatus: BrowserDoctorStepStatus = "skipped";
+  let navigation: BrowserDoctorStepStatus = "skipped";
+  let safeError: string | undefined;
   let browser;
   let context;
   let page;
 
   try {
     browser = await browserType.launch();
-    launch = "PASS";
+    launch = "pass";
     context = await browser.newContext();
-    contextStatus = "PASS";
+    contextStatus = "pass";
     page = await context.newPage();
-    pageStatus = "PASS";
+    pageStatus = "pass";
     await page.goto(
       "data:text/html,<title>AegisAI%20Browser%20Doctor</title><main>browser-runtime-ready</main>",
     );
     const content = await page.getByText("browser-runtime-ready").textContent();
-    navigation = content === "browser-runtime-ready" ? "PASS" : "FAIL";
-  } catch {
-    if (launch === "SKIP") launch = "FAIL";
-    else if (contextStatus === "SKIP") contextStatus = "FAIL";
-    else if (pageStatus === "SKIP") pageStatus = "FAIL";
-    else navigation = "FAIL";
+    navigation = content === "browser-runtime-ready" ? "pass" : "fail";
+  } catch (error) {
+    safeError = sanitizeBrowserDoctorError(
+      error instanceof Error ? error.message : String(error),
+    );
+    if (launch === "skipped") launch = "fail";
+    else if (contextStatus === "skipped") contextStatus = "fail";
+    else if (pageStatus === "skipped") pageStatus = "fail";
+    else navigation = "fail";
   } finally {
     await Promise.allSettled([
       page?.close(),
@@ -49,59 +56,51 @@ async function checkBrowser(
     ]);
   }
 
+  const status =
+    launch === "pass" &&
+    contextStatus === "pass" &&
+    pageStatus === "pass" &&
+    navigation === "pass"
+      ? "pass"
+      : "fail";
   return {
     browser: name,
     launch,
     context: contextStatus,
     page: pageStatus,
     navigation,
-    result:
-      launch === "PASS" &&
-      contextStatus === "PASS" &&
-      pageStatus === "PASS" &&
-      navigation === "PASS"
-        ? "PASS"
-        : "FAIL",
+    status,
+    ...(safeError === undefined ? {} : { error: safeError }),
   };
 }
 
-const browserTypes: readonly (readonly [string, BrowserType])[] = [
-  ["Chromium", chromium],
-  ["Firefox", firefox],
-  ["WebKit", webkit],
-];
-const results: BrowserDoctorResult[] = [];
-for (const [name, browserType] of browserTypes) {
-  results.push(await checkBrowser(name, browserType));
-}
+const browserTypes: Readonly<Record<BrowserDoctorBrowser, BrowserType>> = {
+  chromium,
+  firefox,
+  webkit,
+};
 
-const headings = [
-  "Browser",
-  "Launch",
-  "Context",
-  "Page",
-  "Navigation",
-  "Result",
-] as const;
-const widths = [10, 7, 8, 5, 10, 6] as const;
-console.log(
-  headings
-    .map((heading, index) => heading.padEnd(widths[index] ?? 0))
-    .join("  "),
-);
-for (const result of results) {
-  console.log(
-    [
-      result.browser,
-      result.launch,
-      result.context,
-      result.page,
-      result.navigation,
-      result.result,
-    ]
-      .map((value, index) => value.padEnd(widths[index] ?? 0))
-      .join("  "),
+let options;
+try {
+  options = parseBrowserDoctorArguments(process.argv.slice(2));
+} catch (error) {
+  console.error(
+    redactSensitiveText(
+      error instanceof Error ? error.message : String(error),
+      1_000,
+    ),
   );
+  process.exitCode = 2;
+  process.exit();
 }
 
-process.exitCode = results.some(({ result }) => result === "FAIL") ? 1 : 0;
+const checks: BrowserDoctorCheckResult[] = [];
+for (const browserName of selectedBrowserNames(options.browser)) {
+  checks.push(await checkBrowser(browserName, browserTypes[browserName]));
+}
+
+const result = createBrowserDoctorResult(options.browser, checks);
+console.log(
+  options.json ? JSON.stringify(result, null, 2) : renderBrowserDoctor(result),
+);
+process.exitCode = browserDoctorExitCode(result);

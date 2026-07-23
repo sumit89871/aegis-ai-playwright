@@ -26,6 +26,7 @@ tmp/
 temp/
 *.tmp
 *.log
+/artifacts/browser-doctor/
 
 # Editors
 .idea/

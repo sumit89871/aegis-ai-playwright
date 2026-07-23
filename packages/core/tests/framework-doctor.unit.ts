@@ -85,6 +85,21 @@ await describe("framework doctor", async () => {
     );
   });
 
+  await it("warns about a missing executable in a browser-independent job", () => {
+    const result = evaluateFrameworkDoctor(
+      validInput({
+        browserExecutables: {
+          chromium: false,
+          firefox: false,
+          webkit: false,
+        },
+        browserExecutablesRequired: false,
+      }),
+    );
+    assert.deepEqual(result.summary, { passed: 12, warned: 3, failed: 0 });
+    assert.equal(doctorExitCode(result), 0);
+  });
+
   await it("keeps check ordering deterministic", () => {
     const first = evaluateFrameworkDoctor(validInput());
     const second = evaluateFrameworkDoctor(validInput());

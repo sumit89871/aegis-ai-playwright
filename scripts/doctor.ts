@@ -48,7 +48,9 @@ function npmVersion(): string | null {
   return result.status === 0 ? result.stdout.trim() : null;
 }
 
-async function collectDoctorInput(): Promise<FrameworkDoctorInput> {
+async function collectDoctorInput(
+  browserExecutablesRequired: boolean,
+): Promise<FrameworkDoctorInput> {
   const rootPackage = readPackage("package.json");
   const corePackage = readPackage("packages/core/package.json");
   const coreDependencies = {
@@ -129,10 +131,21 @@ async function collectDoctorInput(): Promise<FrameworkDoctorInput> {
         name.startsWith("@aegis/example-") ||
         specification.includes("examples/"),
     ),
+    browserExecutablesRequired,
   };
 }
 
-const result = evaluateFrameworkDoctor(await collectDoctorInput());
+const supportedArguments = new Set(["--json", "--allow-missing-browsers"]);
+const unsupportedArgument = process.argv
+  .slice(2)
+  .find((argument) => !supportedArguments.has(argument));
+if (unsupportedArgument !== undefined) {
+  throw new Error(`Unsupported doctor option '${unsupportedArgument}'.`);
+}
+
+const result = evaluateFrameworkDoctor(
+  await collectDoctorInput(!process.argv.includes("--allow-missing-browsers")),
+);
 if (process.argv.includes("--json")) {
   console.log(JSON.stringify(result, null, 2));
 } else {

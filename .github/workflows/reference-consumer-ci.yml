@@ -1,0 +1,51 @@
+name: Reference Consumer CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/core/**"
+      - "examples/nopcommerce/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig*.json"
+      - ".github/workflows/reference-consumer-ci.yml"
+  pull_request:
+    paths:
+      - "packages/core/**"
+      - "examples/nopcommerce/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig*.json"
+      - ".github/workflows/reference-consumer-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reference-consumer-static:
+    name: nopCommerce static integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Configure Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify framework setup without browser downloads
+        run: npm run setup -- --skip-browsers
+      - name: Check framework installation without requiring browser binaries
+        run: npm run doctor -- --allow-missing-browsers
+      - name: Validate reference-consumer integration and discover tests
+        run: npm run ci:reference

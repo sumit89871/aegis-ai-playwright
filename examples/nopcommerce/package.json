@@ -15,6 +15,7 @@
     "traceability": "node --experimental-strip-types scripts/generate-traceability.ts",
     "test:smoke": "playwright test tests/smoke --project=chromium",
     "test:cross-browser": "playwright test tests/smoke",
+    "test:list": "node --experimental-strip-types scripts/list-registered-tests.ts",
     "test:headed": "playwright test tests/smoke --project=chromium --headed",
     "test:ui": "playwright test tests/smoke --project=chromium --ui",
     "report": "playwright show-report playwright-report",

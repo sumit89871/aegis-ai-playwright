@@ -42,6 +42,7 @@ export interface FrameworkDoctorInput {
   readonly browserExecutables: BrowserExecutableAvailability;
   readonly essentialCoreExportsPresent: boolean;
   readonly coreHasConsumerDependency: boolean;
+  readonly browserExecutablesRequired?: boolean;
 }
 
 interface SemanticVersion {
@@ -137,6 +138,28 @@ function check(
   });
 }
 
+function browserExecutableCheck(
+  browser: string,
+  available: boolean,
+  required: boolean,
+): FrameworkDoctorCheck {
+  if (available) {
+    return Object.freeze({
+      id: `${browser.toLowerCase()}-executable`,
+      status: "pass",
+      message: `${browser} executable is installed`,
+    });
+  }
+
+  return Object.freeze({
+    id: `${browser.toLowerCase()}-executable`,
+    status: required ? "fail" : "warn",
+    message: required
+      ? `${browser} executable is missing; run npm run setup`
+      : `${browser} executable is not installed in this browser-independent job`,
+  });
+}
+
 function packageVersionsAligned(input: FrameworkDoctorInput): boolean {
   const versions = [
     input.playwrightTestVersion,
@@ -163,6 +186,7 @@ export function evaluateFrameworkDoctor(
   input: FrameworkDoctorInput,
 ): FrameworkDoctorResult {
   const playwrightVersion = input.playwrightTestVersion ?? "not installed";
+  const browserExecutablesRequired = input.browserExecutablesRequired ?? true;
   const checks: readonly FrameworkDoctorCheck[] = Object.freeze([
     check(
       "node-version",
@@ -224,23 +248,20 @@ export function evaluateFrameworkDoctor(
       `Playwright packages are aligned at ${playwrightVersion}`,
       "@playwright/test, playwright, and playwright-core versions are not aligned",
     ),
-    check(
-      "chromium-executable",
+    browserExecutableCheck(
+      "Chromium",
       input.browserExecutables.chromium,
-      "Chromium executable is installed",
-      "Chromium executable is missing; run npm run setup",
+      browserExecutablesRequired,
     ),
-    check(
-      "firefox-executable",
+    browserExecutableCheck(
+      "Firefox",
       input.browserExecutables.firefox,
-      "Firefox executable is installed",
-      "Firefox executable is missing; run npm run setup",
+      browserExecutablesRequired,
     ),
-    check(
-      "webkit-executable",
+    browserExecutableCheck(
+      "WebKit",
       input.browserExecutables.webkit,
-      "WebKit executable is installed",
-      "WebKit executable is missing; run npm run setup",
+      browserExecutablesRequired,
     ),
     check(
       "essential-core-exports",

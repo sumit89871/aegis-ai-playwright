@@ -1,0 +1,74 @@
+name: Framework CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  framework-quality:
+    name: Framework quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Configure Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify framework setup without browser downloads
+        run: npm run setup -- --skip-browsers
+      - name: Run framework quality gates
+        run: npm run ci:framework
+
+  browser-runtime:
+    name: ${{ matrix.browser }} runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Configure Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify framework setup without browser downloads
+        run: npm run setup -- --skip-browsers
+      - name: Install selected Playwright browser and Linux dependencies
+        run: node node_modules/@playwright/test/cli.js install --with-deps "${{ matrix.browser }}"
+      - name: Prepare browser-doctor artifact directory
+        run: mkdir -p artifacts/browser-doctor
+      - name: Run selected browser doctor
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run --silent doctor:browsers -- --browser=${{ matrix.browser }} --json | tee artifacts/browser-doctor/${{ matrix.browser }}.json
+      - name: Upload browser-doctor result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-doctor-${{ matrix.browser }}
+          path: artifacts/browser-doctor/${{ matrix.browser }}.json
+          if-no-files-found: warn
+          retention-days: 7
