@@ -1,0 +1,15 @@
+import { NavigationComponent } from "../components/navigation.component.ts";
+import { ApplicationPage } from "../pages/application.page.ts";
+
+export class OpenApplicationFlow {
+  public constructor(
+    private readonly applicationPage: ApplicationPage,
+    private readonly navigation: NavigationComponent,
+  ) {}
+
+  public async openApplication(): Promise<boolean> {
+    await this.applicationPage.open();
+    await this.applicationPage.expectLoaded();
+    return this.navigation.isVisible();
+  }
+}

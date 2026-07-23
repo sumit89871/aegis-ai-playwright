@@ -1,0 +1,12 @@
+import { defineTestMetadata } from "@aegis/core";
+
+export const applicationLandingMetadata = defineTestMetadata({
+  testId: "TC-EXAMPLE-001",
+  title: "User opens the __APP_NAME__ landing page",
+  feature: "application-access",
+  suite: "smoke",
+  risk: "high",
+  layer: "ui",
+  requirementIds: ["REQ-EXAMPLE-001"],
+  tags: ["@application"],
+});

@@ -58,6 +58,28 @@ function isSensitiveParameterName(name: string): boolean {
   );
 }
 
+export function containsSensitiveUrlData(value: string): boolean {
+  try {
+    const parsedUrl = new URL(value);
+    return (
+      parsedUrl.username.length > 0 ||
+      parsedUrl.password.length > 0 ||
+      [...parsedUrl.searchParams.keys()].some(isSensitiveParameterName)
+    );
+  } catch {
+    const withoutCredentials = value.replace(
+      /^([a-z][a-z\d+.-]*:\/\/)[^/@\s]+@/iu,
+      "$1",
+    );
+    return (
+      withoutCredentials !== value ||
+      /(?:[?&#]|^)(?:[^=&#]*(?:access_token|refresh_token|authorization|password|session|apikey|api_key|passwd|secret|token|auth|code|key|pwd)[^=&#]*)=/iu.test(
+        value,
+      )
+    );
+  }
+}
+
 function decodeParameterName(value: string): string {
   try {
     return decodeURIComponent(value.replaceAll("+", " "));

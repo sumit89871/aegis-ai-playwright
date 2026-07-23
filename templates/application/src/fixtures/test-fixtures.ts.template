@@ -1,0 +1,23 @@
+import { test as base } from "@playwright/test";
+
+import { NavigationComponent } from "../components/navigation.component.ts";
+import { OpenApplicationFlow } from "../flows/open-application.flow.ts";
+import { ApplicationPage } from "../pages/application.page.ts";
+
+interface ApplicationFixtures {
+  readonly applicationPage: ApplicationPage;
+  readonly navigation: NavigationComponent;
+  readonly openApplicationFlow: OpenApplicationFlow;
+}
+
+export const test = base.extend<ApplicationFixtures>({
+  applicationPage: async ({ page }, use) => {
+    await use(new ApplicationPage(page));
+  },
+  navigation: async ({ page }, use) => {
+    await use(new NavigationComponent(page));
+  },
+  openApplicationFlow: async ({ applicationPage, navigation }, use) => {
+    await use(new OpenApplicationFlow(applicationPage, navigation));
+  },
+});

@@ -2,7 +2,7 @@
 
 AegisAI is a reusable, deterministic Playwright and TypeScript framework platform. This repository is an npm-workspaces monorepo that separates application-independent capabilities from consumer-specific automation.
 
-Milestone 1B establishes internal plug-and-play architecture. The packages are private and are not yet published or independently installable from an npm registry.
+The current onboarding foundation provides generic setup, framework health checks, application profiles, application preflight, and a copyable consumer template. The packages remain private and are not yet published or independently installable from an npm registry.
 
 ## Workspace architecture
 
@@ -33,16 +33,44 @@ Client projects may eventually live in separate repositories and consume publish
 - Docker and Docker Compose for the reference example
 - Network access for dependencies, browsers, and pinned container images
 
-## Install all workspaces
+## Clone-to-ready framework workflow
 
-From the repository root:
+These commands prepare and validate AegisAI itself without requiring nopCommerce, Docker, PostgreSQL, an application `.env`, or any running target application:
 
 ```text
+git clone <repository>
+cd aegis-ai-playwright
 npm install
 npm run setup
+npm run doctor
+npm run doctor:browsers
+npm run validate
 ```
 
-`npm install` links the local `@aegis/core` workspace into the example through npm workspace resolution.
+- `npm install` installs and links repository workspace dependencies.
+- `npm run setup` validates Node.js, verifies workspace packages, uses the repository-local Playwright CLI to install or verify Chromium, Firefox, and WebKit, then typechecks and imports `@aegis/core`. It never runs `npm install` recursively or starts application infrastructure. Use `npm run setup -- --skip-browsers` only when browser installation is deliberately handled elsewhere.
+- `npm run doctor` performs read-only framework checks: Node/npm, lockfile and workspace readiness, core resolution/imports, Playwright version alignment, browser executables, and the core-to-consumer dependency boundary.
+- `npm run doctor -- --json` emits the same deterministic checks as machine-readable JSON with stable IDs.
+- `npm run doctor:browsers` launches each browser against a local `data:` URL to prove launch, context, page, and navigation capability without contacting an application or the internet.
+- `npm run validate` runs formatting checks, linting, strict TypeScript checks, and unit tests.
+
+When piping doctor JSON to another tool, use `npm run --silent doctor -- --json` to suppress npm's command banner.
+
+The managed Codex Windows sandbox may prevent Firefox's Gecko tab subprocess from starting even when Firefox is installed correctly. `doctor:browsers` reports that runtime failure honestly. The unchanged command passes in a normal non-administrator PowerShell session; no framework bypass is applied.
+
+## Three readiness levels
+
+| Question                                            | Command type                  | Example                                                                                     |
+| --------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
+| Is AegisAI installed correctly?                     | Framework doctor              | Checks Node.js, Playwright packages, core exports, and browser installations.               |
+| Can AegisAI reach and open my application?          | Application preflight         | The nopCommerce profile checks that `http://localhost:8080` responds and opens in Chromium. |
+| Are this application's supporting services healthy? | Consumer infrastructure check | nopCommerce checks its Docker containers and PostgreSQL database.                           |
+
+Only the first two concepts use reusable core APIs. Infrastructure belongs to each consumer; another application may not use Docker or PostgreSQL at all.
+
+## Onboard another application
+
+The inert files under `templates/application` are a copyable consumer starting point. Replace `__APP_ID__`, `__APP_NAME__`, `__BASE_URL__`, and `__EXPECTED_TITLE__`, remove each `.template` suffix, and keep application selectors, requirements, pages, flows, fixtures, and infrastructure inside the new consumer. The template is validated for structure and safety but is not a runnable workspace while placeholders remain.
 
 ## Test metadata and traceability
 
@@ -80,6 +108,7 @@ npm run nopcommerce:infra:pull
 npm run nopcommerce:infra:up
 npm run nopcommerce:infra:status
 npm run nopcommerce:infra:wait
+npm run nopcommerce:preflight
 ```
 
 Routine operations:
@@ -99,6 +128,8 @@ npm run nopcommerce:test:smoke
 npm run nopcommerce:test:cross-browser
 npm run nopcommerce:traceability
 ```
+
+These `nopcommerce:*` commands are optional consumer commands, not AegisAI core prerequisites. `nopcommerce:preflight` uses the generic application contract and checks only profile validity, HTTP reachability, and one Chromium navigation. Docker and PostgreSQL remain covered separately by `nopcommerce:infra:status` and `nopcommerce:infra:verify-db`.
 
 Detailed setup and installer values are documented in the [example guide](examples/nopcommerce/README.md) and [infrastructure guide](examples/nopcommerce/infrastructure/README.md).
 

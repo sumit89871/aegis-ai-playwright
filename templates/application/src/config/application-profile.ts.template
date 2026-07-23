@@ -1,0 +1,16 @@
+import { defineApplicationProfile } from "@aegis/core";
+
+export const applicationProfile = defineApplicationProfile({
+  id: "__APP_ID__",
+  name: "__APP_NAME__",
+  environment: "test",
+  baseUrl: "__BASE_URL__",
+  healthCheckPath: "/",
+  expectedStatusCodes: [200],
+  requestTimeoutMs: 10_000,
+  browserCheck: {
+    enabled: true,
+    browser: "chromium",
+    expectedTitleContains: "__EXPECTED_TITLE__",
+  },
+});

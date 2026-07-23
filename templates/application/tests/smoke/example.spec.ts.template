@@ -1,0 +1,17 @@
+import { expect } from "@playwright/test";
+import { toPlaywrightAnnotations, toPlaywrightTags } from "@aegis/core";
+
+import { test } from "../../src/fixtures/test-fixtures.ts";
+import { applicationLandingMetadata } from "../metadata/example.metadata.ts";
+
+test(
+  applicationLandingMetadata.title,
+  {
+    tag: toPlaywrightTags(applicationLandingMetadata),
+    annotation: toPlaywrightAnnotations(applicationLandingMetadata),
+  },
+  async ({ openApplicationFlow }) => {
+    const navigationIsVisible = await openApplicationFlow.openApplication();
+    expect(navigationIsVisible).toBe(true);
+  },
+);

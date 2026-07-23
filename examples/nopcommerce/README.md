@@ -22,6 +22,7 @@ npm run nopcommerce:infra:pull
 npm run nopcommerce:infra:up
 npm run nopcommerce:infra:status
 npm run nopcommerce:infra:wait
+npm run nopcommerce:preflight
 ```
 
 The first startup stops at the installation page. Do not run browser search tests until a human completes installation with sample data. See the [manual infrastructure and installation guide](infrastructure/README.md).
@@ -33,6 +34,22 @@ npm run nopcommerce:infra:down
 ```
 
 The `nopcommerce:infra:reset` command deletes all local database and application volumes. It must not be used without explicit authorization for complete data deletion.
+
+## Application preflight versus infrastructure
+
+The nopCommerce workspace defines a generic `ApplicationProfile` using its existing environment configuration. Run this from the repository root:
+
+```text
+npm run nopcommerce:preflight
+```
+
+It validates the profile, requests `/`, expects HTTP 200, opens the base URL in Chromium, and checks that the title contains `Your store`. It does not inspect Docker or PostgreSQL and does not read database credentials.
+
+- **Framework doctor** — `npm run doctor` asks whether Node.js, Playwright, browsers, and `@aegis/core` are ready.
+- **Application preflight** — `npm run nopcommerce:preflight` asks whether AegisAI can reach and open this storefront.
+- **Application infrastructure** — `npm run nopcommerce:infra:status` and `npm run nopcommerce:infra:verify-db` ask whether this example's containers and database are healthy.
+
+Another consumer can reuse the profile and preflight contract without Docker or PostgreSQL.
 
 ## Requirements and tests
 

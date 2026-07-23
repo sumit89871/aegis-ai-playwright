@@ -1,0 +1,13 @@
+import type { Locator, Page } from "@playwright/test";
+
+export class NavigationComponent {
+  private readonly navigation: Locator;
+
+  public constructor(page: Page) {
+    this.navigation = page.getByRole("navigation");
+  }
+
+  public async isVisible(): Promise<boolean> {
+    return this.navigation.isVisible();
+  }
+}

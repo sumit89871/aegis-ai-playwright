@@ -11,6 +11,7 @@
     "setup": "playwright install",
     "typecheck": "tsc -p tsconfig.json",
     "test:unit": "node --test --experimental-strip-types tests/unit/currency.unit.ts tests/unit/cart.unit.ts tests/unit/traceability.unit.ts",
+    "preflight": "node --experimental-strip-types scripts/run-preflight.ts",
     "traceability": "node --experimental-strip-types scripts/generate-traceability.ts",
     "test:smoke": "playwright test tests/smoke --project=chromium",
     "test:cross-browser": "playwright test tests/smoke",

@@ -15,6 +15,7 @@ export type {
   SourceLocationDiagnostic,
 } from "./browser-diagnostics.ts";
 export {
+  containsSensitiveUrlData,
   redactHeaders,
   redactSensitiveText,
   sanitizeUrl,

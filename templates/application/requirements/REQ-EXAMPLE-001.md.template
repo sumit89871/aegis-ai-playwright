@@ -1,0 +1,15 @@
+# REQ-EXAMPLE-001: Application landing page is available
+
+## Business purpose
+
+A user can open the __APP_NAME__ landing page and recognize the application.
+
+## Acceptance criteria
+
+- The application URL is reachable.
+- The landing-page title contains `__EXPECTED_TITLE__`.
+- The main navigation is visible when navigation is part of the application layout.
+
+## Out of scope
+
+Application-specific infrastructure provisioning and authenticated behavior are defined by the consumer project.

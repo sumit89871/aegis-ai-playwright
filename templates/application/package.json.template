@@ -1,0 +1,17 @@
+{
+  "name": "@aegis/__APP_ID__",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "preflight": "node --experimental-strip-types scripts/run-preflight.ts",
+    "test:smoke": "playwright test tests/smoke --project=chromium",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aegis/core": "0.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}

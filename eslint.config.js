@@ -19,7 +19,12 @@ export default tseslint.config(
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
   {
-    files: ["packages/core/**/*.ts", "examples/nopcommerce/**/*.ts"],
+    files: [
+      "packages/core/**/*.ts",
+      "examples/nopcommerce/**/*.ts",
+      "scripts/**/*.ts",
+      "tests/**/*.ts",
+    ],
     languageOptions: {
       parserOptions: {
         projectService: true,

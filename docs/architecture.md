@@ -5,6 +5,9 @@
 ```mermaid
 flowchart TD
     CORE["@aegis/core<br/>generic contracts and helpers"]
+    DOCTOR["Framework doctor<br/>installation readiness"]
+    PROFILE["ApplicationProfile<br/>safe target contract"]
+    PREFLIGHT["Application preflight<br/>HTTP + optional browser"]
     CONSUMER["Consumer workspace<br/>application configuration and automation"]
     REQ[Requirement documents]
     TEST[Test specifications]
@@ -13,6 +16,10 @@ flowchart TD
     PW[Playwright locators and assertions]
 
     CONSUMER --> CORE
+    DOCTOR --> CORE
+    CONSUMER --> PROFILE
+    PROFILE --> PREFLIGHT
+    PREFLIGHT --> CORE
     REQ -. traceability .-> TEST
     CONSUMER --> TEST
     TEST --> FLOW
@@ -33,6 +40,12 @@ Consumer workspaces may import named exports from `@aegis/core`. Core never impo
 - **Infrastructure** belongs to the application that requires it.
 
 The USD parser remains consumer-specific. A future core monetary utility would need explicit locale and currency configuration plus a real cross-application consumer.
+
+## Onboarding and readiness boundaries
+
+Framework setup and doctor commands validate AegisAI itself. They do not need a target application. A consumer-owned `ApplicationProfile` supplies a safe URL and generic expectations to the reusable preflight runner. Preflight proves reachability and optionally one browser navigation, but it does not know how the application is hosted.
+
+Application infrastructure remains a third, separate concern. The nopCommerce example owns Docker and PostgreSQL checks; another company application may use neither. This prevents core from acquiring application installation logic, database types, container names, or business data.
 
 ## Why there is no BasePage
 
