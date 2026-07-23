@@ -38,12 +38,56 @@ The `nopcommerce:infra:reset` command deletes all local database and application
 
 The current browser coverage traces to [REQ-SEARCH-001](requirements/REQ-SEARCH-001.md): exact and partial catalogue searches should display **Build your own computer**.
 
+The catalog gives each automated check deterministic metadata:
+
+- A **requirement** describes the expected business behavior.
+- A **test ID** uniquely identifies one automated test.
+- A **suite** indicates when the test normally runs, such as `smoke`.
+- **Risk** indicates the business impact if the behavior fails.
+- A **layer** identifies the technical level under test; the current checks use `ui`.
+- **Tags** expose those values to Playwright for selective execution.
+
+The exact-search test is `TC-SEARCH-001` (high risk), and the partial-search test is `TC-SEARCH-002` (medium risk). Both cover `REQ-SEARCH-001`.
+
+Validate the registry and generate a deterministic coverage map from the repository root:
+
+```text
+npm run nopcommerce:traceability
+```
+
+The command fails on invalid or duplicate metadata, unknown requirements, missing requirement documents, and active requirements without tests. It writes local output to:
+
+```text
+examples/nopcommerce/test-results/traceability/traceability.json
+examples/nopcommerce/test-results/traceability/traceability.md
+```
+
+These generated files are ignored by Git. The report is derived from the requirement registry and test metadata catalog, not from Playwright runtime reports.
+
 After installation with sample data and a successful readiness check:
 
 ```text
 npm run nopcommerce:test:smoke
 npm run nopcommerce:test:cross-browser
 ```
+
+Structured tags also support focused runs from PowerShell at the repository root:
+
+```powershell
+# All smoke tests
+npm run nopcommerce:test:smoke
+
+# High-risk tests
+npm exec --workspace=@aegis/example-nopcommerce -- playwright test tests/smoke --project=chromium --grep '@risk:high'
+
+# Every test linked to one requirement
+npm exec --workspace=@aegis/example-nopcommerce -- playwright test tests/smoke --project=chromium --grep '@requirement:REQ-SEARCH-001'
+
+# One test ID
+npm exec --workspace=@aegis/example-nopcommerce -- playwright test tests/smoke --project=chromium --grep '@test-id:TC-SEARCH-001'
+```
+
+The metadata also appears as Playwright tags and annotations in the HTML report, so a reviewer can see the test ID, requirement, feature, suite, risk, and layer without interpreting the title.
 
 The smoke command runs the two Chromium search tests and writes the HTML report to `examples/nopcommerce/playwright-report`. A normal test run refreshes that directory, so it represents the most recent execution written there.
 

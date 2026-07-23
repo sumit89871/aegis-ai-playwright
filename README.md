@@ -44,6 +44,18 @@ npm run setup
 
 `npm install` links the local `@aegis/core` workspace into the example through npm workspace resolution.
 
+## Test metadata and traceability
+
+`@aegis/core` provides application-independent validation and Playwright conversion for structured test metadata. Consumer projects own their requirement registries and test catalogs. A requirement describes expected business behavior; a test ID uniquely identifies an automated check; suite, risk, and layer describe when it runs, the impact of failure, and the technical level under test.
+
+Generate and validate the nopCommerce coverage map from the repository root:
+
+```text
+npm run nopcommerce:traceability
+```
+
+The local JSON and Markdown reports are written beneath `examples/nopcommerce/test-results/traceability` and are ignored by Git.
+
 ## Root quality gates
 
 ```text
@@ -85,6 +97,7 @@ The first startup displays the installation page. Complete installation manually
 ```text
 npm run nopcommerce:test:smoke
 npm run nopcommerce:test:cross-browser
+npm run nopcommerce:traceability
 ```
 
 Detailed setup and installer values are documented in the [example guide](examples/nopcommerce/README.md) and [infrastructure guide](examples/nopcommerce/infrastructure/README.md).
