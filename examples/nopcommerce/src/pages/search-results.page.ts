@@ -29,6 +29,12 @@ export class SearchResultsPage {
     await expect(productLink).toBeVisible();
   }
 
+  public async openProduct(productName: string): Promise<void> {
+    await this.productCards
+      .getByRole("link", { name: productName, exact: true })
+      .click();
+  }
+
   public async getDisplayedProductNames(): Promise<readonly string[]> {
     return this.productNameLinks.allTextContents();
   }

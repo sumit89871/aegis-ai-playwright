@@ -10,14 +10,20 @@ import type { TestInfo } from "@playwright/test";
 
 import { HeaderComponent } from "../components/header.component";
 import { environment } from "../config/environment";
+import { AddProductToCartFlow } from "../flows/add-product-to-cart.flow.ts";
 import { ProductSearchFlow } from "../flows/product-search.flow";
+import { ProductDetailsPage } from "../pages/product-details.page.ts";
 import { SearchResultsPage } from "../pages/search-results.page";
+import { ShoppingCartPage } from "../pages/shopping-cart.page.ts";
 
 interface AegisFixtures {
   readonly header: HeaderComponent;
   readonly browserDiagnostics: undefined;
+  readonly addProductToCartFlow: AddProductToCartFlow;
   readonly productSearchFlow: ProductSearchFlow;
+  readonly productDetailsPage: ProductDetailsPage;
   readonly searchResultsPage: SearchResultsPage;
+  readonly shoppingCartPage: ShoppingCartPage;
 }
 
 function addDiagnosticsWarning(testInfo: TestInfo, error: unknown): void {
@@ -129,7 +135,33 @@ export const test = base.extend<AegisFixtures>({
   searchResultsPage: async ({ page }, use) => {
     await use(new SearchResultsPage(page));
   },
+  productDetailsPage: async ({ page }, use) => {
+    await use(new ProductDetailsPage(page));
+  },
+  shoppingCartPage: async ({ page }, use) => {
+    await use(new ShoppingCartPage(page));
+  },
   productSearchFlow: async ({ page, header }, use) => {
     await use(new ProductSearchFlow(page, header));
+  },
+  addProductToCartFlow: async (
+    {
+      productSearchFlow,
+      searchResultsPage,
+      productDetailsPage,
+      header,
+      shoppingCartPage,
+    },
+    use,
+  ) => {
+    await use(
+      new AddProductToCartFlow(
+        productSearchFlow,
+        searchResultsPage,
+        productDetailsPage,
+        header,
+        shoppingCartPage,
+      ),
+    );
   },
 });

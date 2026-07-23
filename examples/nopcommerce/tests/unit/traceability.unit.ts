@@ -37,11 +37,48 @@ await describe("nopCommerce traceability", async () => {
     });
   });
 
+  await it("validates TC-CART-001 metadata", () => {
+    const cartMetadata = nopCommerceTestCatalog.find(
+      (metadata) => metadata.testId === "TC-CART-001",
+    );
+
+    assert.notEqual(cartMetadata, undefined);
+    assert.equal(
+      validateTestMetadata(cartMetadata).requirementIds[0],
+      "REQ-CART-001",
+    );
+  });
+
+  await it("registers REQ-CART-001 as an active covered requirement", async () => {
+    const report = await buildTraceabilityReport({
+      requirements: nopCommerceRequirementRegistry,
+      tests: nopCommerceTestCatalog,
+      workspaceRoot: WORKSPACE_ROOT,
+    });
+    const cartRequirement = report.requirements.find(
+      (requirement) => requirement.requirementId === "REQ-CART-001",
+    );
+
+    if (cartRequirement === undefined) {
+      throw new Error(
+        "REQ-CART-001 was not present in the traceability report.",
+      );
+    }
+    assert.equal(cartRequirement.status, "active");
+    assert.equal(cartRequirement.coverageState, "covered");
+    assert.deepEqual(cartRequirement.linkedTestIds, ["TC-CART-001"]);
+  });
+
   await it("detects duplicate test IDs", async () => {
+    const exactSearchMetadata = nopCommerceTestCatalog.find(
+      (metadata) => metadata.testId === "TC-SEARCH-001",
+    );
+    assert.notEqual(exactSearchMetadata, undefined);
+
     await assert.rejects(
       buildTraceabilityReport({
         requirements: nopCommerceRequirementRegistry,
-        tests: [nopCommerceTestCatalog[0], nopCommerceTestCatalog[0]],
+        tests: [...nopCommerceTestCatalog, exactSearchMetadata],
         workspaceRoot: WORKSPACE_ROOT,
       }),
       /Duplicate test ID: TC-SEARCH-001/u,
@@ -114,22 +151,25 @@ await describe("nopCommerce traceability", async () => {
     });
 
     assert.deepEqual(report.summary, {
-      totalRegisteredRequirements: 1,
-      activeRequirements: 1,
-      coveredRequirements: 1,
+      totalRegisteredRequirements: 2,
+      activeRequirements: 2,
+      coveredRequirements: 2,
       uncoveredRequirements: 0,
-      totalRegisteredTests: 2,
+      totalRegisteredTests: 3,
       testsBySuite: {
-        smoke: 2,
+        smoke: 3,
         regression: 0,
         integration: 0,
         "end-to-end": 0,
       },
-      testsByRisk: { critical: 0, high: 1, medium: 1, low: 0 },
-      testsByLayer: { ui: 2, api: 0, database: 0, contract: 0 },
-      testsByFeature: { "product-search": 2 },
+      testsByRisk: { critical: 0, high: 2, medium: 1, low: 0 },
+      testsByLayer: { ui: 3, api: 0, database: 0, contract: 0 },
+      testsByFeature: { "product-search": 2, "shopping-cart": 1 },
     });
-    assert.deepEqual(report.requirements[0]?.linkedTestIds, [
+    const searchRequirement = report.requirements.find(
+      (requirement) => requirement.requirementId === "REQ-SEARCH-001",
+    );
+    assert.deepEqual(searchRequirement?.linkedTestIds, [
       "TC-SEARCH-001",
       "TC-SEARCH-002",
     ]);

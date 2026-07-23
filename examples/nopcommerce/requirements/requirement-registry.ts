@@ -9,5 +9,13 @@ export const productSearchRequirement = defineRequirementMetadata({
   status: "active",
 });
 
+export const shoppingCartRequirement = defineRequirementMetadata({
+  requirementId: "REQ-CART-001",
+  title: "Shopper can add an available product to the cart",
+  documentPath: "requirements/REQ-CART-001.md",
+  feature: "shopping-cart",
+  status: "active",
+});
+
 export const nopCommerceRequirementRegistry: readonly RequirementMetadata[] =
-  Object.freeze([productSearchRequirement]);
+  Object.freeze([shoppingCartRequirement, productSearchRequirement]);

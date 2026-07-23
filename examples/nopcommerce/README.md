@@ -36,7 +36,10 @@ The `nopcommerce:infra:reset` command deletes all local database and application
 
 ## Requirements and tests
 
-The current browser coverage traces to [REQ-SEARCH-001](requirements/REQ-SEARCH-001.md): exact and partial catalogue searches should display **Build your own computer**.
+The current browser coverage traces to:
+
+- [REQ-SEARCH-001](requirements/REQ-SEARCH-001.md): exact and partial catalogue searches should display **Build your own computer**.
+- [REQ-CART-001](requirements/REQ-CART-001.md): an available product can be added as one unit and reviewed with consistent cart pricing.
 
 The catalog gives each automated check deterministic metadata:
 
@@ -48,6 +51,30 @@ The catalog gives each automated check deterministic metadata:
 - **Tags** expose those values to Playwright for selective execution.
 
 The exact-search test is `TC-SEARCH-001` (high risk), and the partial-search test is `TC-SEARCH-002` (medium risk). Both cover `REQ-SEARCH-001`.
+
+## Shopping-cart journey
+
+`TC-CART-001` searches for the sample-data product **HTC smartphone**, opens its details, adds exactly one unit, and verifies the full cart's product, quantity, unit price, and subtotal. This product was selected because it is in stock, anonymously purchasable, has a stable displayed price, and requires no configurable options or customer-entered text.
+
+The test uses three application layers:
+
+- `HeaderComponent` reads the user-facing cart count and opens the cart.
+- `ProductDetailsPage`, `SearchResultsPage`, and `ShoppingCartPage` model their respective screens and return typed values.
+- `AddProductToCartFlow` coordinates search, product review, add-to-cart, and cart navigation as one business activity.
+
+A Flow keeps the test readable: the test describes the shopper's intent and financial assertions instead of repeating every click and locator. Playwright gives every test a fresh browser context, so cart cookies are isolated. The cart test also checks both the initial header count and the full empty-cart page before adding the product; it never deletes shared application data.
+
+Run only the cart test ID from PowerShell at the repository root:
+
+```powershell
+npm exec --workspace=@aegis/example-nopcommerce -- playwright test tests/smoke --project=chromium --grep '@test-id:TC-CART-001'
+```
+
+Run the shopping-cart feature:
+
+```powershell
+npm exec --workspace=@aegis/example-nopcommerce -- playwright test tests/smoke --project=chromium --grep '@feature:shopping-cart'
+```
 
 Validate the registry and generate a deterministic coverage map from the repository root:
 
@@ -89,7 +116,7 @@ npm exec --workspace=@aegis/example-nopcommerce -- playwright test tests/smoke -
 
 The metadata also appears as Playwright tags and annotations in the HTML report, so a reviewer can see the test ID, requirement, feature, suite, risk, and layer without interpreting the title.
 
-The smoke command runs the two Chromium search tests and writes the HTML report to `examples/nopcommerce/playwright-report`. A normal test run refreshes that directory, so it represents the most recent execution written there.
+The smoke command runs the two Chromium search tests and the cart journey, then writes the HTML report to `examples/nopcommerce/playwright-report`. A normal test run refreshes that directory, so it represents the most recent execution written there.
 
 Open that report from the repository root with the convenience command:
 
