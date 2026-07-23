@@ -8,7 +8,7 @@ export default defineConfig({
   outputDir: "test-results/artifacts",
   fullyParallel: true,
   forbidOnly: environment.isCi,
-  retries: environment.isCi ? 2 : 0,
+  retries: environment.isCi ? 1 : 0,
   ...(environment.isCi ? { workers: 1 } : {}),
   timeout: 45_000,
   expect: {
@@ -23,7 +23,7 @@ export default defineConfig({
     baseURL: environment.baseUrl,
     screenshot: "only-on-failure",
     video: "retain-on-failure",
-    trace: "on-first-retry",
+    trace: "retain-on-failure",
   },
   projects: [
     {

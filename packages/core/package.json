@@ -16,6 +16,9 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test:unit": "node --test --experimental-strip-types tests/environment.unit.ts"
+    "test:unit": "node --test --experimental-strip-types tests/environment.unit.ts tests/redaction.unit.ts tests/browser-diagnostics.unit.ts"
+  },
+  "peerDependencies": {
+    "@playwright/test": "^1.61.1"
   }
 }

@@ -7,6 +7,7 @@
 - Generic configuration contracts
 - Validated HTTP/HTTPS URL parsing
 - Functions that accept consumer-provided defaults and environment sources
+- Bounded, redacted Playwright browser diagnostics used by consumer fixtures
 - Reusable deterministic utilities with at least one real consumer
 - Named package exports that do not depend on a specific application
 

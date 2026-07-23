@@ -61,6 +61,33 @@ npm run report
 
 Avoid running `npx playwright show-report` from an arbitrary directory. Playwright may find a different `playwright-report` folder there and display an older or unrelated run.
 
+## Failure evidence and diagnostics
+
+When a test fails, Playwright keeps evidence under `examples/nopcommerce/test-results`:
+
+- The HTML report summarizes test results and links to retained evidence.
+- A screenshot shows the page at the point of failure.
+- A video shows browser activity leading to the failure.
+- A trace supports step-by-step inspection of actions, network activity, and page state.
+- Console diagnostics contain browser JavaScript errors.
+- Page-error diagnostics contain uncaught browser exceptions.
+- Failed-request diagnostics identify requests that never completed.
+- HTTP-error diagnostics identify 4xx and 5xx responses without recording response bodies.
+
+Screenshots, videos, traces, and diagnostic JSON attachments are retained only for failed tests. On failure, all four diagnostic categories are attached as JSON arrays, including empty arrays, plus a diagnostic summary and safe test context. Generated evidence is ignored by Git.
+
+Open the latest HTML report from the repository root:
+
+```text
+npm run nopcommerce:report
+```
+
+Open a retained trace directly with:
+
+```text
+npx playwright show-trace <path-to-trace.zip>
+```
+
 Workspace unit tests include the intentionally USD-specific currency parser:
 
 ```text
