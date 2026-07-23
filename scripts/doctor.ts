@@ -62,6 +62,11 @@ async function collectDoctorInput(
   let coreResolvable: boolean;
   let coreImportable: boolean;
   let coreExports: readonly string[] = [];
+  let aiConfigurationImportable = false;
+  let aiDisabledByDefault = false;
+  let aiProviderIdsValid = false;
+  let aiMockProviderAvailable = false;
+  let aiOpenRouterEndpointValid = false;
   try {
     import.meta.resolve("@aegis/core");
     coreResolvable = true;
@@ -72,6 +77,51 @@ async function collectDoctorInput(
     const core = (await import("@aegis/core")) as Record<string, unknown>;
     coreImportable = true;
     coreExports = Object.keys(core);
+    const defaultAiConfiguration = core.defaultAiConfiguration as
+      | ((
+          overrides?: Readonly<Record<string, unknown>>,
+        ) => Readonly<Record<string, unknown>>)
+      | undefined;
+    const validateAiProviderId = core.validateAiProviderId as
+      ((id: string) => boolean) | undefined;
+    const MockAiProvider = core.MockAiProvider as
+      | (new () => { readonly id: string; readonly networkAccess: string })
+      | undefined;
+    const OpenRouterAiProvider = core.OpenRouterAiProvider as
+      (new () => { readonly id: string }) | undefined;
+    aiConfigurationImportable = [
+      "createAiClient",
+      "defaultAiConfiguration",
+      "validateAiConfiguration",
+      "MockAiProvider",
+      "OpenRouterAiProvider",
+    ].every((name) => coreExports.includes(name));
+    if (
+      defaultAiConfiguration !== undefined &&
+      validateAiProviderId !== undefined &&
+      MockAiProvider !== undefined &&
+      OpenRouterAiProvider !== undefined
+    ) {
+      const defaults = defaultAiConfiguration();
+      const mock = new MockAiProvider();
+      const openRouter = new OpenRouterAiProvider();
+      aiDisabledByDefault =
+        defaults.enabled === false &&
+        defaults.allowNetworkCalls === false &&
+        defaults.apiKeyEnvironmentVariable === undefined;
+      aiProviderIdsValid =
+        validateAiProviderId(mock.id) && validateAiProviderId(openRouter.id);
+      aiMockProviderAvailable =
+        mock.id === "mock" && mock.networkAccess === "none";
+      const openRouterConfiguration = defaultAiConfiguration({
+        provider: "openrouter",
+        model: "example/model-v1",
+        mockOnly: false,
+      });
+      aiOpenRouterEndpointValid =
+        typeof openRouterConfiguration.endpoint === "string" &&
+        openRouterConfiguration.endpoint.startsWith("https://");
+    }
   } catch {
     coreImportable = false;
   }
@@ -100,6 +150,8 @@ async function collectDoctorInput(
     "validateTestMetadata",
     "validateApplicationProfile",
     "runApplicationPreflight",
+    "createAiClient",
+    "MockAiProvider",
   ];
 
   return {
@@ -131,6 +183,25 @@ async function collectDoctorInput(
         name.startsWith("@aegis/example-") ||
         specification.includes("examples/"),
     ),
+    aiConfigurationImportable,
+    aiDisabledByDefault,
+    aiProviderIdsValid,
+    aiMockProviderAvailable,
+    aiOpenRouterEndpointValid,
+    aiExampleContainsSecret: ((): boolean => {
+      try {
+        const example = readFileSync(
+          new URL(".env.ai.example", repositoryRoot),
+          "utf8",
+        );
+        const keyLine = example
+          .split(/\r?\n/u)
+          .find((line) => line.startsWith("OPENROUTER_API_KEY="));
+        return keyLine === undefined || keyLine !== "OPENROUTER_API_KEY=";
+      } catch {
+        return true;
+      }
+    })(),
     browserExecutablesRequired,
   };
 }

@@ -14,6 +14,7 @@
 - Bounded HTTP and optional single-browser application preflight checks
 - Serializable page-readiness definitions and web-first readiness execution
 - Sanitized, bounded accessibility scanning with configurable impact policy
+- Provider-neutral AI contracts, offline mock execution, secure OpenRouter transport, prompt boundaries, structured output, usage limits, and safe lifecycle events
 - Reusable deterministic utilities with at least one real consumer
 - Named package exports that do not depend on a specific application
 
@@ -24,7 +25,7 @@
 - Product names, catalogue assumptions, or requirement documents
 - Application Docker infrastructure
 - Speculative abstractions created only for possible future use
-- AI or LLM execution inside deterministic test paths
+- Application-specific AI prompts, uploaded UI evidence, autonomous tools, generated tests, locator healing, or source modification
 
 ## Framework doctor APIs
 
@@ -39,6 +40,14 @@ Core exposes pure doctor evaluation functions that accept injected version, file
 `runApplicationPreflight()` validates the profile, performs a body-free HTTP reachability check, and optionally opens the application with one selected Playwright browser. It returns sanitized serializable results; rendering and process exit behavior remain separate. Consumer infrastructure, credentials, selectors, database details, and business data never belong in this model.
 
 Dependency direction is always from a consumer to `@aegis/core`. Core must never import consumer code.
+
+## Provider-neutral AI foundation
+
+The `ai` public module is an opt-in communication boundary, not part of deterministic browser execution. `AiProvider` keeps vendor responses behind plain AegisAI request/result models. `createAiClient` validates configuration, enforces capability/network/mock-only policy and request limits, renders versioned prompts, resolves only one named secret at execution time, retries bounded transient failures, validates structured output, and emits prompt-free lifecycle records.
+
+`MockAiProvider` is deterministic and offline for tests and CI. `OpenRouterAiProvider` is the first real adapter and uses built-in `fetch`; core has no provider SDK dependency. AI defaults to disabled, network access defaults to denied, and normal framework commands need no key. External content must be wrapped as untrusted evidence. This boundary reduces prompt-injection risk but cannot make model output trustworthy.
+
+Core does not contain application prompts, application evidence, business decisions, provider pricing, tools, code execution, test generation, self-healing, or source mutation. Full behavior and security rules are documented in [AI foundation](../../docs/ai-foundation.md).
 
 ## Generic UI quality APIs
 

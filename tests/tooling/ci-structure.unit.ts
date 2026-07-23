@@ -52,7 +52,12 @@ await describe("GitHub Actions workflow structure", async () => {
       "utf8",
     );
     assert.match(rootPackage, /"ci:framework": "[^"]*npm run ui:policy/u);
+    assert.match(rootPackage, /"ci:framework": "[^"]*npm run ai:smoke/u);
     assert.doesNotMatch(frameworkQuality, /test:accessibility/u);
+    assert.doesNotMatch(
+      frameworkQuality,
+      /OPENROUTER_API_KEY|openrouter\.ai|secrets\./u,
+    );
   });
 
   await it("defines exactly the required browser matrix and artifacts", () => {

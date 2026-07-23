@@ -2,7 +2,7 @@
 
 AegisAI is a reusable, deterministic Playwright and TypeScript framework platform. This repository is an npm-workspaces monorepo that separates application-independent capabilities from consumer-specific automation.
 
-The current onboarding foundation provides generic setup, framework health checks, application profiles, application preflight, and a copyable consumer template. The packages remain private and are not yet published or independently installable from an npm registry.
+The current foundation provides generic setup, framework health checks, application profiles, application preflight, UI quality controls, and a secure provider-neutral AI communication layer. The packages remain private and are not yet published or independently installable from an npm registry.
 
 ## Workspace architecture
 
@@ -52,6 +52,7 @@ npm run validate
 - `npm install` installs and links repository workspace dependencies.
 - `npm run setup` validates Node.js, verifies workspace packages, uses the repository-local Playwright CLI to install or verify Chromium, Firefox, and WebKit, then typechecks and imports `@aegis/core`. It never runs `npm install` recursively or starts application infrastructure. Use `npm run setup -- --skip-browsers` only when browser installation is deliberately handled elsewhere.
 - `npm run doctor` performs read-only framework checks: Node/npm, lockfile and workspace readiness, core resolution/imports, Playwright version alignment, browser executables, and the core-to-consumer dependency boundary.
+- Doctor also verifies that AI configuration imports, AI remains disabled/offline by default, provider identifiers are valid, the mock provider is available, the OpenRouter endpoint policy is secure, and the committed AI example contains no populated key. It makes no AI network request and does not inspect whether a real key exists.
 - `npm run doctor -- --json` emits the same deterministic checks as machine-readable JSON with stable IDs.
 - `npm run doctor:browsers` launches each browser against a local `data:` URL to prove launch, context, page, and navigation capability without contacting an application or the internet.
 - `npm run validate` runs formatting checks, linting, strict TypeScript checks, and unit tests.
@@ -105,9 +106,10 @@ npm run typecheck
 npm run test:unit
 npm run validate
 npm run ui:policy
+npm run ai:smoke
 ```
 
-Root validation covers formatting, linting, all workspace TypeScript projects, and workspace unit tests. `ui:policy` is the deterministic static gate for forbidden sleeps, XPath, raw test selectors, and other locator-maintainability signals. It intentionally excludes application browser tests. The complete locator, readiness, suppression, and accessibility rules are in the [UI quality policy](docs/ui-quality.md).
+Root validation covers formatting, linting, all workspace TypeScript projects, and workspace unit tests. `ui:policy` is the deterministic static gate for forbidden sleeps, XPath, raw test selectors, and other locator-maintainability signals. `ai:smoke` exercises only the deterministic mock provider, performs zero network requests, and requires no key. The complete locator rules are in the [UI quality policy](docs/ui-quality.md); the opt-in AI boundary is in the [AI foundation guide](docs/ai-foundation.md).
 
 ## Continuous integration
 
@@ -123,7 +125,7 @@ CI uses `npm ci` rather than `npm install`, then runs setup with `--skip-browser
 
 The [framework workflow](.github/workflows/framework-ci.yml) contains four independently visible executions:
 
-- Framework quality validates installation consistency, core boundaries, formatting, lint, strict TypeScript, unit tests, template integrity, and the static UI policy. It launches no browser and contacts no application.
+- Framework quality validates installation consistency, core boundaries, formatting, lint, strict TypeScript, unit tests, template integrity, the static UI policy, and the offline mock AI smoke. It launches no browser, contacts no application, and calls no external AI provider.
 - Chromium, Firefox, and WebKit matrix entries each install only their selected browser and navigate to a deterministic `data:` URL.
 - Each browser entry uploads its bounded JSON doctor result from `artifacts/browser-doctor` for seven days, even when the check fails.
 
@@ -187,6 +189,8 @@ Detailed setup and installer values are documented in the [example guide](exampl
 
 The shared public demo returned Cloudflare HTTP 403 human-verification pages to automated browser sessions. AegisAI does not bypass CAPTCHA or Cloudflare protections. The pinned local environment is the deterministic development target.
 
-## Current scope
+## AI foundation scope
 
-The repository currently contains deterministic browser foundations and one reference consumer. AI, LLM integration, recording, healing, dashboards, product configuration, and external package publication remain out of scope.
+The provider-neutral AI module is disabled and offline by default. It provides validated configuration, narrow secret resolution, versioned prompt templates, untrusted-evidence boundaries, structured-output validation, usage/cost limits, safe events, a deterministic mock, and an OpenRouter adapter. `.env.ai.example` documents optional local variable names; core does not auto-load it, and a real key must remain only in ignored local configuration or the shell. Model availability and prices may change.
+
+This foundation does not yet heal locators, generate tests, plan tests, diagnose failures, analyse screenshots, upload DOM content, execute tools, or modify source. Deterministic UI tests remain fully functional without AI. See the [AI foundation guide](docs/ai-foundation.md).

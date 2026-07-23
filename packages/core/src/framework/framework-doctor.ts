@@ -42,6 +42,12 @@ export interface FrameworkDoctorInput {
   readonly browserExecutables: BrowserExecutableAvailability;
   readonly essentialCoreExportsPresent: boolean;
   readonly coreHasConsumerDependency: boolean;
+  readonly aiConfigurationImportable: boolean;
+  readonly aiDisabledByDefault: boolean;
+  readonly aiProviderIdsValid: boolean;
+  readonly aiMockProviderAvailable: boolean;
+  readonly aiOpenRouterEndpointValid: boolean;
+  readonly aiExampleContainsSecret: boolean;
   readonly browserExecutablesRequired?: boolean;
 }
 
@@ -275,6 +281,42 @@ export function evaluateFrameworkDoctor(
       "Core has no reverse dependency on consumer examples",
       "Core contains a forbidden dependency on a consumer example",
     ),
+    check(
+      "ai-configuration-import",
+      input.aiConfigurationImportable,
+      "AI configuration APIs import successfully",
+      "AI configuration APIs are unavailable",
+    ),
+    check(
+      "ai-disabled-default",
+      input.aiDisabledByDefault,
+      "AI is disabled and offline by default",
+      "AI default configuration is not safely disabled",
+    ),
+    check(
+      "ai-provider-identifiers",
+      input.aiProviderIdsValid,
+      "Registered AI provider identifiers are valid",
+      "One or more AI provider identifiers are invalid",
+    ),
+    check(
+      "ai-mock-provider",
+      input.aiMockProviderAvailable,
+      "Deterministic offline mock AI provider is available",
+      "Deterministic offline mock AI provider is unavailable",
+    ),
+    check(
+      "ai-openrouter-endpoint",
+      input.aiOpenRouterEndpointValid,
+      "OpenRouter endpoint configuration is secure",
+      "OpenRouter endpoint configuration is invalid",
+    ),
+    check(
+      "ai-example-secret",
+      !input.aiExampleContainsSecret,
+      "AI example configuration contains no populated secret",
+      "AI example configuration appears to contain a populated secret",
+    ),
   ]);
   const summary = summarizeDoctorChecks(checks);
   const status: DoctorStatus =
@@ -303,6 +345,12 @@ const DOCTOR_CHECK_LABELS: Readonly<Record<string, string>> = Object.freeze({
   "webkit-executable": "WebKit executable",
   "essential-core-exports": "Essential core exports",
   "core-consumer-boundary": "Core to consumer dependency boundary",
+  "ai-configuration-import": "AI configuration import",
+  "ai-disabled-default": "AI disabled by default",
+  "ai-provider-identifiers": "AI provider identifiers",
+  "ai-mock-provider": "Offline AI mock provider",
+  "ai-openrouter-endpoint": "OpenRouter endpoint policy",
+  "ai-example-secret": "AI example secret hygiene",
 });
 
 export function renderFrameworkDoctor(result: FrameworkDoctorResult): string {
