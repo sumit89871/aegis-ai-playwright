@@ -30,6 +30,8 @@ export interface AiClientRequest {
   readonly model?: string;
   readonly temperature?: number;
   readonly maxOutputTokens?: number;
+  readonly requestTimeoutMs?: number;
+  readonly maxRetries?: number;
   readonly correlationId?: string;
 }
 
@@ -61,7 +63,12 @@ function retryDelay(error: AiError, retryNumber: number): number {
 function validateClientRequest(
   request: AiClientRequest,
   configuration: AiConfiguration,
-): { readonly temperature: number; readonly maxOutputTokens: number } {
+): {
+  readonly temperature: number;
+  readonly maxOutputTokens: number;
+  readonly requestTimeoutMs: number;
+  readonly maxRetries: number;
+} {
   const model = request.model ?? configuration.model;
   if (!validateAiProviderId(model)) {
     throw new AiError({
@@ -93,7 +100,31 @@ function validateClientRequest(
       message: "AI request maxOutputTokens must be a positive integer.",
     });
   }
-  return { temperature, maxOutputTokens };
+  const requestTimeoutMs =
+    request.requestTimeoutMs ?? configuration.requestTimeoutMs;
+  if (
+    !Number.isInteger(requestTimeoutMs) ||
+    requestTimeoutMs < 100 ||
+    requestTimeoutMs > configuration.requestTimeoutMs
+  ) {
+    throw new AiError({
+      code: "request-invalid",
+      message:
+        "AI request timeout must be between 100 and the configured timeout.",
+    });
+  }
+  const maxRetries = request.maxRetries ?? configuration.maxRetries;
+  if (
+    !Number.isInteger(maxRetries) ||
+    maxRetries < 0 ||
+    maxRetries > configuration.maxRetries
+  ) {
+    throw new AiError({
+      code: "request-invalid",
+      message: "AI request retries must not exceed the configured retry limit.",
+    });
+  }
+  return { temperature, maxOutputTokens, requestTimeoutMs, maxRetries };
 }
 
 function actualApproximateCost(
@@ -189,10 +220,8 @@ export function createAiClient(
           request.template,
           request.variables,
         );
-        const { temperature, maxOutputTokens } = validateClientRequest(
-          request,
-          configuration,
-        );
+        const { temperature, maxOutputTokens, requestTimeoutMs, maxRetries } =
+          validateClientRequest(request, configuration);
         const estimate = enforceAiUsageLimits(configuration, {
           inputCharacters: rendered.totalCharacters,
           requestedOutputTokens: maxOutputTokens,
@@ -218,7 +247,7 @@ export function createAiClient(
           temperature,
           maxOutputTokens,
           responseFormat: request.responseFormat,
-          timeoutMs: configuration.requestTimeoutMs,
+          timeoutMs: requestTimeoutMs,
           metadata: Object.freeze({
             promptTemplateId: rendered.templateId,
             promptTemplateVersion: rendered.templateVersion,
@@ -232,11 +261,7 @@ export function createAiClient(
         });
         const startedAt = now();
         let retryCount = 0;
-        for (
-          let attempt = 0;
-          attempt <= configuration.maxRetries;
-          attempt += 1
-        ) {
+        for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
           recorder.emit({
             type: "request-started",
             ...eventBase,
@@ -303,10 +328,7 @@ export function createAiClient(
             });
           } catch (error) {
             const safeError = toSafeAiError(error);
-            if (
-              !safeError.transient ||
-              retryCount >= configuration.maxRetries
-            ) {
+            if (!safeError.transient || retryCount >= maxRetries) {
               recorder.emit({
                 type: "request-failed",
                 ...eventBase,

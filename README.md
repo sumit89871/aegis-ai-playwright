@@ -2,7 +2,7 @@
 
 AegisAI is a reusable, deterministic Playwright and TypeScript framework platform. This repository is an npm-workspaces monorepo that separates application-independent capabilities from consumer-specific automation.
 
-The current foundation provides generic setup, framework health checks, application profiles, application preflight, UI quality controls, and a secure provider-neutral AI communication layer. The packages remain private and are not yet published or independently installable from an npm registry.
+The current foundation provides generic setup, framework health checks, application profiles, application preflight, UI quality controls, a secure provider-neutral AI communication layer, and strictly advisory UI failure analysis. The packages remain private and are not yet published or independently installable from an npm registry.
 
 ## Workspace architecture
 
@@ -109,7 +109,7 @@ npm run ui:policy
 npm run ai:smoke
 ```
 
-Root validation covers formatting, linting, all workspace TypeScript projects, and workspace unit tests. `ui:policy` is the deterministic static gate for forbidden sleeps, XPath, raw test selectors, and other locator-maintainability signals. `ai:smoke` exercises only the deterministic mock provider, performs zero network requests, and requires no key. The complete locator rules are in the [UI quality policy](docs/ui-quality.md); the opt-in AI boundary is in the [AI foundation guide](docs/ai-foundation.md).
+Root validation covers formatting, linting, all workspace TypeScript projects, and workspace unit tests. `ui:policy` is the deterministic static gate for forbidden sleeps, XPath, raw test selectors, and other locator-maintainability signals. `ai:smoke` and `ai:analyse:demo` exercise only the deterministic mock provider, perform zero network requests, and require no key. The complete locator rules are in the [UI quality policy](docs/ui-quality.md); the opt-in AI boundary is in the [AI foundation guide](docs/ai-foundation.md), and the evidence/report contract is in [advisory UI failure analysis](docs/ai-failure-analysis.md).
 
 ## Continuous integration
 
@@ -125,7 +125,7 @@ CI uses `npm ci` rather than `npm install`, then runs setup with `--skip-browser
 
 The [framework workflow](.github/workflows/framework-ci.yml) contains four independently visible executions:
 
-- Framework quality validates installation consistency, core boundaries, formatting, lint, strict TypeScript, unit tests, template integrity, the static UI policy, and the offline mock AI smoke. It launches no browser, contacts no application, and calls no external AI provider.
+- Framework quality validates installation consistency, core boundaries, formatting, lint, strict TypeScript, unit tests, template integrity, the static UI policy, the offline mock AI smoke, and the offline advisory-analysis demo. It launches no browser, contacts no application, and calls no external AI provider.
 - Chromium, Firefox, and WebKit matrix entries each install only their selected browser and navigate to a deterministic `data:` URL.
 - Each browser entry uploads its bounded JSON doctor result from `artifacts/browser-doctor` for seven days, even when the check fails.
 
@@ -189,8 +189,15 @@ Detailed setup and installer values are documented in the [example guide](exampl
 
 The shared public demo returned Cloudflare HTTP 403 human-verification pages to automated browser sessions. AegisAI does not bypass CAPTCHA or Cloudflare protections. The pinned local environment is the deterministic development target.
 
-## AI foundation scope
+## AI foundation and advisory failure analysis
 
 The provider-neutral AI module is disabled and offline by default. It provides validated configuration, narrow secret resolution, versioned prompt templates, untrusted-evidence boundaries, structured-output validation, usage/cost limits, safe events, a deterministic mock, and an OpenRouter adapter. `.env.ai.example` documents optional local variable names; core does not auto-load it, and a real key must remain only in ignored local configuration or the shell. Model availability and prices may change.
 
-This foundation does not yet heal locators, generate tests, plan tests, diagnose failures, analyse screenshots, upload DOM content, execute tools, or modify source. Deterministic UI tests remain fully functional without AI. See the [AI foundation guide](docs/ai-foundation.md).
+Failure analysis is available in advisory mode. Deterministic rules classify sanitized structured evidence even with AI disabled; optional AI may add only schema-validated, evidence-cited recommendations. Playwright status and the original failure never change. The analyzer never receives screenshots, DOM/HTML, request or response bodies, headers, cookies, credentials, or environment dumps.
+
+```text
+npm run ai:analyse:demo
+npm run ai:analyse:demo -- --json
+```
+
+The feature does not heal or replace locators, generate or modify tests, plan tests, analyse screenshots, execute tools, or apply remediation. Deterministic UI tests remain fully functional without AI. See the [AI foundation guide](docs/ai-foundation.md) and [advisory failure-analysis guide](docs/ai-failure-analysis.md).

@@ -194,6 +194,14 @@ When a test fails, Playwright keeps evidence under `examples/nopcommerce/test-re
 
 Screenshots, videos, traces, and diagnostic JSON attachments are retained only for failed tests. On failure, all four diagnostic categories are attached as JSON arrays, including empty arrays, plus a diagnostic summary and safe test context. Generated evidence is ignored by Git.
 
+### Advisory failure analysis
+
+After the existing browser diagnostics are attached for an unexpected failure, the fixture creates `failure-analysis.json` and `failure-analysis.md`. The default is deterministic-only: no AI client is created, no API key is read, and no network request is made. Passing tests receive no failure analysis.
+
+The report cites bounded evidence IDs and suggests investigation without modifying the test or application. The known home-page color-contrast failure is classified as `accessibility-failure`, cites sanitized accessibility evidence, recommends application theme review, and explicitly recommends no locator change. The genuine accessibility assertion remains failed.
+
+Use `npm run nopcommerce:report` to review the original failure, diagnostics, accessibility attachments, and advisory report together. Binary screenshots, video, and traces are never submitted to the analyzer.
+
 Open the latest HTML report from the repository root:
 
 ```text

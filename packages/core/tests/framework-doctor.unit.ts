@@ -37,6 +37,8 @@ function validInput(
     aiMockProviderAvailable: true,
     aiOpenRouterEndpointValid: true,
     aiExampleContainsSecret: false,
+    failureAnalysisImportable: true,
+    failureAnalysisSafeDefault: true,
     ...overrides,
   };
 }
@@ -102,7 +104,7 @@ await describe("framework doctor", async () => {
         browserExecutablesRequired: false,
       }),
     );
-    assert.deepEqual(result.summary, { passed: 18, warned: 3, failed: 0 });
+    assert.deepEqual(result.summary, { passed: 20, warned: 3, failed: 0 });
     assert.equal(doctorExitCode(result), 0);
   });
 
@@ -117,13 +119,13 @@ await describe("framework doctor", async () => {
 
   await it("calculates summary counts and exit status", () => {
     const passing = evaluateFrameworkDoctor(validInput());
-    assert.deepEqual(passing.summary, { passed: 21, warned: 0, failed: 0 });
+    assert.deepEqual(passing.summary, { passed: 23, warned: 0, failed: 0 });
     assert.equal(doctorExitCode(passing), 0);
 
     const failing = evaluateFrameworkDoctor(
       validInput({ packageLockExists: false }),
     );
-    assert.deepEqual(failing.summary, { passed: 20, warned: 0, failed: 1 });
+    assert.deepEqual(failing.summary, { passed: 22, warned: 0, failed: 1 });
     assert.equal(doctorExitCode(failing), 1);
   });
 

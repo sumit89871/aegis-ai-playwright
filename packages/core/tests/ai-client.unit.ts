@@ -179,6 +179,31 @@ await describe("AI client", async () => {
     assert.equal(provider.inspections().length, 0);
   });
 
+  await it("allows a capability to tighten timeout and retry limits", async () => {
+    const provider = new MockAiProvider({ structuredOutput: { result: "ok" } });
+    const result = await createAiClient(enabledMockConfiguration(), {
+      providers: [provider],
+    }).generate({
+      ...request,
+      requestTimeoutMs: 1_000,
+      maxRetries: 0,
+    });
+    assert.equal(result.status, "completed");
+  });
+
+  await it("rejects request limits that exceed configured policy", async () => {
+    await assert.rejects(
+      createAiClient(enabledMockConfiguration(), {
+        providers: [new MockAiProvider()],
+      }).generate({
+        ...request,
+        requestTimeoutMs: 60_000,
+      }),
+      (error: unknown) =>
+        error instanceof AiError && error.code === "request-invalid",
+    );
+  });
+
   await it("does not let an event sink failure change execution", async () => {
     const result = await createAiClient(enabledMockConfiguration(), {
       providers: [new MockAiProvider({ structuredOutput: { result: "ok" } })],

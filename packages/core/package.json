@@ -16,7 +16,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test:unit": "node --test --experimental-strip-types tests/environment.unit.ts tests/redaction.unit.ts tests/browser-diagnostics.unit.ts tests/test-metadata.unit.ts tests/framework-doctor.unit.ts tests/browser-doctor.unit.ts tests/application-profile.unit.ts tests/application-preflight.unit.ts tests/page-readiness.unit.ts tests/accessibility.unit.ts tests/ai-configuration.unit.ts tests/ai-secret-resolution.unit.ts tests/ai-prompt-template.unit.ts tests/ai-structured-output.unit.ts tests/ai-usage-limits.unit.ts tests/ai-mock-provider.unit.ts tests/ai-openrouter-provider.unit.ts tests/ai-client.unit.ts"
+    "test:unit": "node --test --experimental-strip-types tests/environment.unit.ts tests/redaction.unit.ts tests/browser-diagnostics.unit.ts tests/test-metadata.unit.ts tests/framework-doctor.unit.ts tests/browser-doctor.unit.ts tests/application-profile.unit.ts tests/application-preflight.unit.ts tests/page-readiness.unit.ts tests/accessibility.unit.ts tests/ai-configuration.unit.ts tests/ai-secret-resolution.unit.ts tests/ai-prompt-template.unit.ts tests/ai-structured-output.unit.ts tests/ai-usage-limits.unit.ts tests/ai-mock-provider.unit.ts tests/ai-openrouter-provider.unit.ts tests/ai-client.unit.ts tests/failure-evidence.unit.ts tests/failure-analysis.unit.ts tests/failure-analysis-prompt.unit.ts tests/failure-analysis-client.unit.ts"
   },
   "peerDependencies": {
     "@playwright/test": "^1.61.1"

@@ -67,6 +67,8 @@ async function collectDoctorInput(
   let aiProviderIdsValid = false;
   let aiMockProviderAvailable = false;
   let aiOpenRouterEndpointValid = false;
+  let failureAnalysisImportable = false;
+  let failureAnalysisSafeDefault = false;
   try {
     import.meta.resolve("@aegis/core");
     coreResolvable = true;
@@ -89,6 +91,9 @@ async function collectDoctorInput(
       | undefined;
     const OpenRouterAiProvider = core.OpenRouterAiProvider as
       (new () => { readonly id: string }) | undefined;
+    const defaultFailureAnalysisConfiguration =
+      core.defaultFailureAnalysisConfiguration as
+        (() => Readonly<Record<string, unknown>>) | undefined;
     aiConfigurationImportable = [
       "createAiClient",
       "defaultAiConfiguration",
@@ -96,6 +101,19 @@ async function collectDoctorInput(
       "MockAiProvider",
       "OpenRouterAiProvider",
     ].every((name) => coreExports.includes(name));
+    failureAnalysisImportable = [
+      "analyseUiFailure",
+      "analyseFailureDeterministically",
+      "defaultFailureAnalysisConfiguration",
+      "renderFailureAnalysisMarkdown",
+    ].every((name) => coreExports.includes(name));
+    if (defaultFailureAnalysisConfiguration !== undefined) {
+      const defaults = defaultFailureAnalysisConfiguration();
+      failureAnalysisSafeDefault =
+        defaults.enabled === true &&
+        defaults.mode === "deterministic-only" &&
+        defaults.deterministicFallbackEnabled === true;
+    }
     if (
       defaultAiConfiguration !== undefined &&
       validateAiProviderId !== undefined &&
@@ -202,6 +220,8 @@ async function collectDoctorInput(
         return true;
       }
     })(),
+    failureAnalysisImportable,
+    failureAnalysisSafeDefault,
     browserExecutablesRequired,
   };
 }

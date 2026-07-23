@@ -53,6 +53,7 @@ await describe("GitHub Actions workflow structure", async () => {
     );
     assert.match(rootPackage, /"ci:framework": "[^"]*npm run ui:policy/u);
     assert.match(rootPackage, /"ci:framework": "[^"]*npm run ai:smoke/u);
+    assert.match(rootPackage, /"ci:framework": "[^"]*npm run ai:analyse:demo/u);
     assert.doesNotMatch(frameworkQuality, /test:accessibility/u);
     assert.doesNotMatch(
       frameworkQuality,

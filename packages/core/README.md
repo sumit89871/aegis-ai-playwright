@@ -15,6 +15,7 @@
 - Serializable page-readiness definitions and web-first readiness execution
 - Sanitized, bounded accessibility scanning with configurable impact policy
 - Provider-neutral AI contracts, offline mock execution, secure OpenRouter transport, prompt boundaries, structured output, usage limits, and safe lifecycle events
+- Bounded UI failure evidence, deterministic advisory classification, evidence-cited AI enrichment, and safe JSON/Markdown rendering
 - Reusable deterministic utilities with at least one real consumer
 - Named package exports that do not depend on a specific application
 
@@ -47,7 +48,13 @@ The `ai` public module is an opt-in communication boundary, not part of determin
 
 `MockAiProvider` is deterministic and offline for tests and CI. `OpenRouterAiProvider` is the first real adapter and uses built-in `fetch`; core has no provider SDK dependency. AI defaults to disabled, network access defaults to denied, and normal framework commands need no key. External content must be wrapped as untrusted evidence. This boundary reduces prompt-injection risk but cannot make model output trustworthy.
 
-Core does not contain application prompts, application evidence, business decisions, provider pricing, tools, code execution, test generation, self-healing, or source mutation. Full behavior and security rules are documented in [AI foundation](../../docs/ai-foundation.md).
+Core does not contain application selectors, business decisions, provider pricing, tools, code execution, test generation, self-healing, or source mutation. The generic failure-analysis prompt accepts only consumer-supplied sanitized evidence and never owns application values. Full behavior and security rules are documented in [AI foundation](../../docs/ai-foundation.md) and [Advisory UI failure analysis](../../docs/ai-failure-analysis.md).
+
+## Advisory failure analysis
+
+`normalizeFailureEvidence` turns safe test metadata, errors, browser diagnostics, readiness details, accessibility summaries, and attachment names into bounded records with stable evidence IDs. `analyseFailureDeterministically` recognizes explicit failure signals without AI. `analyseUiFailure` may ask a configured `AiClient` for additional advice, but it always retains deterministic facts and rejects unsafe, uncited, or malformed output. `renderFailureAnalysisMarkdown` renders the validated report without raw HTML or executable blocks.
+
+Defaults are deterministic-only. No API key is resolved and no network call is attempted. Consumers decide whether and how to attach reports; the API cannot update test status, apply a locator, execute a command, or write source code.
 
 ## Generic UI quality APIs
 

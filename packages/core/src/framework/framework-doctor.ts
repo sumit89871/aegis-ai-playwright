@@ -48,6 +48,8 @@ export interface FrameworkDoctorInput {
   readonly aiMockProviderAvailable: boolean;
   readonly aiOpenRouterEndpointValid: boolean;
   readonly aiExampleContainsSecret: boolean;
+  readonly failureAnalysisImportable: boolean;
+  readonly failureAnalysisSafeDefault: boolean;
   readonly browserExecutablesRequired?: boolean;
 }
 
@@ -317,6 +319,18 @@ export function evaluateFrameworkDoctor(
       "AI example configuration contains no populated secret",
       "AI example configuration appears to contain a populated secret",
     ),
+    check(
+      "failure-analysis-import",
+      input.failureAnalysisImportable,
+      "Advisory failure-analysis APIs import successfully",
+      "Advisory failure-analysis APIs are unavailable",
+    ),
+    check(
+      "failure-analysis-safe-default",
+      input.failureAnalysisSafeDefault,
+      "Failure analysis defaults to deterministic-only advisory mode",
+      "Failure analysis default could permit an unexpected AI provider call",
+    ),
   ]);
   const summary = summarizeDoctorChecks(checks);
   const status: DoctorStatus =
@@ -351,6 +365,8 @@ const DOCTOR_CHECK_LABELS: Readonly<Record<string, string>> = Object.freeze({
   "ai-mock-provider": "Offline AI mock provider",
   "ai-openrouter-endpoint": "OpenRouter endpoint policy",
   "ai-example-secret": "AI example secret hygiene",
+  "failure-analysis-import": "Failure analysis import",
+  "failure-analysis-safe-default": "Failure analysis safe default",
 });
 
 export function renderFrameworkDoctor(result: FrameworkDoctorResult): string {

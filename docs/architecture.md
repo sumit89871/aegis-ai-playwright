@@ -52,7 +52,7 @@ Consumer workspaces may import named exports from `@aegis/core`. Core never impo
 - **Pages and components** own application locators and explicit page-level verification.
 - **Infrastructure** belongs to the application that requires it.
 - **UI quality tooling** owns generic readiness validation, accessibility processing, redaction, and deterministic source-policy analysis. Consumer pages provide their own landmarks, headings, and scan scope.
-- **AI foundation** owns provider-neutral configuration, prompt/output validation, narrow secret resolution, usage limits, safe events, and provider adapters. It owns no application prompts or autonomous behavior.
+- **AI foundation** owns provider-neutral configuration, prompt/output validation, narrow secret resolution, usage limits, safe events, provider adapters, and the generic advisory failure-analysis contract. It owns no application selectors or autonomous behavior.
 
 The USD parser remains consumer-specific. A future core monetary utility would need explicit locale and currency configuration plus a real cross-application consumer.
 
@@ -99,6 +99,8 @@ Workspace packages are private and source-linked today. A later milestone may ad
 
 ## AI boundary
 
-The current AI foundation is a disabled-by-default communication layer. It has a deterministic offline mock and an explicitly network-gated OpenRouter adapter, but no UI capability invokes it. Prompts are versioned, untrusted evidence is delimited and redacted, structured output is validated, and token/cost/retry/time limits apply before or around provider execution.
+The AI foundation is a disabled-by-default communication layer. It has a deterministic offline mock and an explicitly network-gated OpenRouter adapter. Advisory failure analysis consumes only bounded structured evidence and defaults to a local rules engine; the nopCommerce fixture does not create an AI client.
 
-It does not analyse failures, screenshots, accessibility evidence, or DOM data; it does not generate tests, heal locators, execute tools, or modify source. Future AI-assisted capabilities must remain opt-in and outside deterministic browser execution. Consumer tests remain reproducible without an AI service or credentials. See [AI foundation](ai-foundation.md).
+Evidence normalization assigns deterministic IDs and removes secrets and local paths. The rule-based conclusion remains authoritative. Optional AI output is accepted only after schema, safety, and citation validation; conflicts are explicit. Reports are attached after existing diagnostics and cannot affect Playwright status.
+
+It does not inspect screenshot/video/trace bytes or DOM data; it does not generate tests, heal locators, execute tools, or modify source. Consumer tests remain reproducible without an AI service or credentials. See [AI foundation](ai-foundation.md) and [Advisory UI failure analysis](ai-failure-analysis.md).

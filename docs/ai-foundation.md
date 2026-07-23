@@ -4,7 +4,7 @@
 
 The AI foundation is a controlled, provider-neutral communication layer for future quality-engineering capabilities. It validates configuration and prompts, enforces network and usage policy, resolves one named secret only at execution time, invokes a registered provider, validates structured output, and returns plain serializable results.
 
-This milestone does **not** heal locators, replace selectors, generate tests, plan tests, diagnose Playwright failures, analyse screenshots, upload DOM content, execute tools, or modify source code. Deterministic Playwright execution does not import or call AI unless a future consumer explicitly opts in.
+The communication layer now supports an advisory failure-analysis consumer, but it still does **not** heal locators, replace selectors, generate tests, plan tests, analyse screenshots, upload DOM content, execute tools, or modify source code. Deterministic Playwright execution never calls a real AI provider unless a consumer explicitly opts in.
 
 ```mermaid
 flowchart LR
@@ -27,7 +27,8 @@ The mock provider is used by unit tests, local demonstrations, and CI. OpenRoute
 - Mock-only mode is enabled by default.
 - Disabled execution does not resolve an API key or contact a provider.
 - Normal setup, doctor, UI policy, Playwright, accessibility, traceability, and validation commands require no AI key or model.
-- CI runs only deterministic unit tests and the offline mock smoke command.
+- CI runs only deterministic unit tests, the offline mock smoke command, and the offline mock failure-analysis demo.
+- Failure analysis defaults to deterministic-only rules; its demo uses `MockAiProvider` and makes zero network calls.
 
 Run the offline demonstration with:
 
@@ -74,3 +75,9 @@ When an exact tokenizer is unavailable, the estimate conservatively uses one tok
 The adapter uses the built-in HTTP client surface through `fetch`, bearer authentication, JSON requests, and `AbortController`. It retries only through the generic client and only for transient conditions such as HTTP 429 or 5xx responses. Authentication and malformed requests are not retried. `Retry-After` is bounded, response size is bounded, and HTTP error bodies are not retained or emitted.
 
 No real OpenRouter request is made by repository tests or CI. A future explicitly authorized local integration test must verify a currently available model, actual provider response semantics, and current pricing without committing a key or output log.
+
+## Advisory failure-analysis consumer
+
+The generic analyzer normalizes bounded diagnostic, readiness, accessibility, and metadata records into deterministic evidence IDs. Its rule-based conclusion is always retained. Optional model output must cite those IDs and pass controlled schema and safety validation; conflicts lower confidence and leave deterministic facts primary. Reports contain safe provenance, never full prompts or model responses.
+
+Run the offline demonstration with `npm run ai:analyse:demo` or its JSON form with `npm run ai:analyse:demo -- --json`. See [Advisory UI failure analysis](ai-failure-analysis.md) for the evidence contract and Playwright attachment lifecycle.

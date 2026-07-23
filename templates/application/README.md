@@ -13,7 +13,7 @@ The template demonstrates an application profile, preflight command, Playwright 
 
 The generic `@aegis/core` package does not install or manage the target application. If the consumer needs containers, databases, or other infrastructure, keep those commands in that consumer project.
 
-The template does not enable AI. A future consumer may opt into the generic `@aegis/core` AI interfaces, but application prompts and redacted evidence must remain consumer-owned. Normal page objects, flows, and tests must continue to work without a provider, model, network connection, or API key.
+The template does not enable AI. A consumer may opt into the generic `@aegis/core` advisory failure-analysis interfaces only after its existing diagnostics are sanitized. Start with deterministic-only mode; application evidence and provider/privacy/cost decisions remain consumer-owned. Never submit screenshots, DOM/HTML, credentials, headers, bodies, or environment values. Normal page objects, flows, and tests must continue to work without a provider, model, network connection, or API key.
 
 ```text
 application/
