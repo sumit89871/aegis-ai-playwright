@@ -18,6 +18,32 @@ nopCommerce requires PostgreSQL's `citext` extension for case-insensitive text c
 
 The PostgreSQL image executes files in `/docker-entrypoint-initdb.d` only while creating a brand-new, empty database volume. Adding an initialization script does not change a database volume that PostgreSQL has already initialized. Therefore, an existing incomplete installation created without `citext` requires one full local reset before retrying the installer.
 
+## PostgreSQL nextval compatibility
+
+PostgreSQL's native sequence function has the signature `pg_catalog.nextval(regclass)`. The nopCommerce installation path, or one of its database libraries, may instead invoke `nextval` with a value typed as `character`. PostgreSQL cannot implicitly resolve that call to the native signature and raises error `42883: function nextval(character) does not exist`.
+
+This local infrastructure supplies the narrow overload `public.nextval(character)`. It casts the character argument to `regclass` and delegates directly to `pg_catalog.nextval`. The overload is isolated to the nopCommerce example database: it does not replace or modify PostgreSQL's built-in function, and it adds no overloads for other argument types.
+
+Like the `citext` initializer, this compatibility initializer runs only when PostgreSQL creates a new, empty database volume. Adding it to an already initialized volume has no effect, so a volume created before this initializer was added requires a clean local reset before retrying an incomplete installation. Run `npm run nopcommerce:infra:verify-db` after recreation to verify both function signatures and a temporary test sequence without touching application sequences or data.
+
+## PostgreSQL datetime2fromparts compatibility
+
+`DATETIME2FROMPARTS` originates from SQL Server and has no native PostgreSQL equivalent under that name. The nopCommerce installation path may emit it even while using PostgreSQL, which otherwise provides `pg_catalog.make_timestamp` for constructing timestamps.
+
+This example database supplies only the exact eight-integer `public.datetime2fromparts` overload required by the observed installer expression. It validates precision and fractions, converts the fractional component into fractional seconds, and delegates timestamp construction to `pg_catalog.make_timestamp`. The function is isolated to local nopCommerce infrastructure and does not replace or modify PostgreSQL built-ins. No other SQL Server date functions or overloads are provided.
+
+PostgreSQL stores timestamps with microsecond precision. A seventh fractional digit may therefore be rounded; that behavior is acceptable for the observed nopCommerce installation expression targeted by this compatibility function.
+
+## PostgreSQL initialization order
+
+PostgreSQL runs these files lexically when it creates a fresh, empty database volume:
+
+1. `001-enable-citext.sql`
+2. `002-nextval-character-compat.sql`
+3. `003-datetime2fromparts-compat.sql`
+
+Initialization scripts do not run against an existing database volume. A volume created before any required initializer was added must be cleanly reset and recreated before retrying an incomplete installation.
+
 The reset is deliberately limited to these local nopCommerce volumes:
 
 - PostgreSQL data in `aegis-nopcommerce-db-data`
@@ -65,7 +91,7 @@ This milestone does not automate or submit the installation form.
 | `npm run nopcommerce:infra:status`    | Show service state and health.                                                     |
 | `npm run nopcommerce:infra:logs`      | Follow logs for both services.                                                     |
 | `npm run nopcommerce:infra:wait`      | Wait for an HTTP response from the configured local port.                          |
-| `npm run nopcommerce:infra:verify-db` | Verify `citext` and report the public application table count.                     |
+| `npm run nopcommerce:infra:verify-db` | Verify all compatibility functions, safe functional probes, and table count.       |
 | `npm run nopcommerce:infra:restart`   | Restart services without deleting data.                                            |
 | `npm run nopcommerce:infra:reset`     | **Destructively remove containers and all named data volumes.**                    |
 

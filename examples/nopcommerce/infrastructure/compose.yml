@@ -22,6 +22,8 @@ services:
     volumes:
       - nopcommerce_db_data:/var/lib/postgresql/data
       - ./postgres-init/001-enable-citext.sql:/docker-entrypoint-initdb.d/001-enable-citext.sql:ro
+      - ./postgres-init/002-nextval-character-compat.sql:/docker-entrypoint-initdb.d/002-nextval-character-compat.sql:ro
+      - ./postgres-init/003-datetime2fromparts-compat.sql:/docker-entrypoint-initdb.d/003-datetime2fromparts-compat.sql:ro
     networks:
       - nopcommerce_private
 

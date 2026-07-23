@@ -45,6 +45,22 @@ npm run nopcommerce:test:smoke
 npm run nopcommerce:test:cross-browser
 ```
 
+The smoke command runs the two Chromium search tests and writes the HTML report to `examples/nopcommerce/playwright-report`. A normal test run refreshes that directory, so it represents the most recent execution written there.
+
+Open that report from the repository root with the convenience command:
+
+```text
+npm run nopcommerce:report
+```
+
+From inside `examples/nopcommerce`, the equivalent workspace command is:
+
+```text
+npm run report
+```
+
+Avoid running `npx playwright show-report` from an arbitrary directory. Playwright may find a different `playwright-report` folder there and display an older or unrelated run.
+
 Workspace unit tests include the intentionally USD-specific currency parser:
 
 ```text
