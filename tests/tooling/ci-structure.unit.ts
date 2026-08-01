@@ -59,10 +59,34 @@ await describe("GitHub Actions workflow structure", async () => {
       rootPackage,
       /"ci:framework": "[^"]*npm run ai:locator:evaluate/u,
     );
+    assert.match(
+      rootPackage,
+      /"ci:framework": "[^"]*npm run ai:locator:holdout:evaluate/u,
+    );
     assert.doesNotMatch(frameworkQuality, /test:accessibility/u);
     assert.doesNotMatch(
       frameworkQuality,
       /OPENROUTER_API_KEY|openrouter\.ai|secrets\./u,
+    );
+  });
+
+  await it("keeps holdout evaluation synthetic, offline, and non-mutating in CI", () => {
+    const rootPackage = readFileSync(
+      new URL("package.json", repositoryRoot),
+      "utf8",
+    );
+    const holdoutScript = readFileSync(
+      new URL("scripts/locator-holdout-evaluate.ts", repositoryRoot),
+      "utf8",
+    );
+    assert.match(rootPackage, /ai:locator:holdout:evaluate/u);
+    assert.doesNotMatch(
+      holdoutScript,
+      /OpenRouterAiProvider|OPENROUTER_API_KEY|allowNetworkCalls:\s*true|nopcommerce|localhost|docker|postgres/iu,
+    );
+    assert.doesNotMatch(
+      `${frameworkWorkflow}\n${referenceWorkflow}`,
+      /locator-observations\/pending|locator-observations\/review/u,
     );
   });
 

@@ -89,6 +89,12 @@ flowchart LR
 
 Framework quality needs only the locked npm workspaces. Browser runtime checks use a deterministic `data:` URL and install one browser per matrix entry. Reference-consumer validation loads nopCommerce configuration, metadata, and tests only far enough to validate traceability and discovery; it does not launch a browser or contact the application. Docker, PostgreSQL, application installation, and live smoke execution remain consumer-owned concerns.
 
+## Shadow-observation boundary
+
+The generic locator-observation module imports the existing sanitized `locator-diagnosis.json` contract from any Playwright consumer. Filesystem orchestration stays in thin root scripts; core receives plain JSON and never imports a consumer. Content-derived anonymous IDs deduplicate records without retaining a hostname, repository path, user, or machine identity.
+
+Observation and human-review records are separate. The holdout adapter constructs analyser input only from the observation, invokes the existing deterministic locator diagnosis and evaluation metrics, and compares the result with review data afterward. Local pending observations, review files, and reports are ignored artifacts. No component can apply a candidate, replay an action, or modify source.
+
 ## Why there is no BasePage
 
 A generic `BasePage` tends to collect unrelated navigation, waiting, selector, and assertion helpers. That inheritance hides dependencies and encourages broad abstractions with weak business meaning. Consumer projects instead use small composition-based objects that expose only behaviour owned by their page or component.

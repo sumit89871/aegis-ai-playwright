@@ -6,6 +6,7 @@ export * from "./diagnostics/index.ts";
 export * from "./framework/index.ts";
 export * from "./locator-diagnosis/index.ts";
 export * from "./locator-evaluation/index.ts";
+export * from "./locator-observations/index.ts";
 export * from "./testing/index.ts";
 export * from "./ui/index.ts";
 export type {

@@ -220,3 +220,15 @@ npm run ai:locator:evaluate -- --mode=mock-ai
 ```
 
 See [Locator-diagnosis evaluation](docs/locator-diagnosis-evaluation.md). A controlled benchmark does not prove production accuracy, and automatic healing remains absent.
+
+Shadow observations add a privacy-safe path from real Playwright locator-diagnosis attachments to independent human review. Observation evidence and expected answers are stored separately, and the blind holdout evaluator sees only the observation before comparing its result with the review. Local observation, review, and report files remain ignored.
+
+```powershell
+npm run ai:locator:observations:collect -- --input=<relative-test-results-path>
+npm run ai:locator:observations:prepare-review
+npm run ai:locator:observations:validate-reviews
+npm run ai:locator:holdout:evaluate
+npm run ai:locator:holdout:evaluate -- --json
+```
+
+See [Locator shadow observations](docs/locator-shadow-observations.md). Synthetic fixtures validate the workflow but are not production evidence; no accuracy claim is meaningful until enough independent observations have been reviewed. Locator replay and self-healing remain absent.

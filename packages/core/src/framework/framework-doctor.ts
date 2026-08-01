@@ -62,6 +62,14 @@ export interface FrameworkDoctorInput {
   readonly locatorEvaluationDeterministicDefault: boolean;
   readonly locatorEvaluationNetworkDisabledDefault: boolean;
   readonly locatorEvaluationArtifactsIgnored: boolean;
+  readonly locatorObservationImportable: boolean;
+  readonly locatorObservationSchemaValid: boolean;
+  readonly locatorObservationReviewSchemaValid: boolean;
+  readonly locatorObservationArtifactsIgnored: boolean;
+  readonly locatorHoldoutDeterministicDefault: boolean;
+  readonly locatorHoldoutNetworkDisabledDefault: boolean;
+  readonly locatorHoldoutApiKeyNotRequired: boolean;
+  readonly locatorHoldoutDoesNotApplyLocators: boolean;
   readonly automaticHealingAbsent: boolean;
   readonly browserExecutablesRequired?: boolean;
 }
@@ -417,6 +425,54 @@ export function evaluateFrameworkDoctor(
       "Generated locator-evaluation reports are not ignored",
     ),
     check(
+      "locator-observation-import",
+      input.locatorObservationImportable,
+      "Shadow-observation and holdout APIs import successfully",
+      "Shadow-observation or holdout APIs are unavailable",
+    ),
+    check(
+      "locator-observation-schema",
+      input.locatorObservationSchemaValid,
+      "Locator-observation schema identifiers are valid",
+      "Locator-observation schema identifiers are invalid",
+    ),
+    check(
+      "locator-observation-review-schema",
+      input.locatorObservationReviewSchemaValid,
+      "Locator-observation review schema is valid",
+      "Locator-observation review schema is invalid",
+    ),
+    check(
+      "locator-observation-artifacts-ignored",
+      input.locatorObservationArtifactsIgnored,
+      "Pending observations, reviews, and reports are ignored",
+      "Locator-observation artifacts are not ignored",
+    ),
+    check(
+      "locator-holdout-deterministic-default",
+      input.locatorHoldoutDeterministicDefault,
+      "Blind holdout evaluation is deterministic by default",
+      "Blind holdout evaluation default is not deterministic",
+    ),
+    check(
+      "locator-holdout-network-default",
+      input.locatorHoldoutNetworkDisabledDefault,
+      "Blind holdout evaluation requires no network by default",
+      "Blind holdout evaluation may use a network provider by default",
+    ),
+    check(
+      "locator-holdout-key-default",
+      input.locatorHoldoutApiKeyNotRequired,
+      "Blind holdout evaluation requires no AI key",
+      "Blind holdout evaluation unexpectedly requires an AI key",
+    ),
+    check(
+      "locator-holdout-no-application",
+      input.locatorHoldoutDoesNotApplyLocators,
+      "Holdout evaluation cannot apply locators or heal tests",
+      "A locator-application capability was detected",
+    ),
+    check(
       "automatic-healing-absent",
       input.automaticHealingAbsent,
       "Automatic locator healing capability is absent",
@@ -470,6 +526,14 @@ const DOCTOR_CHECK_LABELS: Readonly<Record<string, string>> = Object.freeze({
   "locator-evaluation-deterministic-default": "Locator evaluation default",
   "locator-evaluation-network-default": "Locator evaluation network policy",
   "locator-evaluation-artifacts-ignored": "Locator evaluation artifacts",
+  "locator-observation-import": "Shadow observation import",
+  "locator-observation-schema": "Shadow observation schema",
+  "locator-observation-review-schema": "Observation review schema",
+  "locator-observation-artifacts-ignored": "Observation artifacts",
+  "locator-holdout-deterministic-default": "Holdout deterministic default",
+  "locator-holdout-network-default": "Holdout network policy",
+  "locator-holdout-key-default": "Holdout API-key policy",
+  "locator-holdout-no-application": "Holdout no locator application",
   "automatic-healing-absent": "Automatic healing absent",
 });
 

@@ -55,3 +55,7 @@ An optional future command, `npm run ai:locator:evaluate:openrouter -- --confirm
 The existing Chromium, Firefox, and WebKit matrix also runs eight local data-page cases. They cover no-match, duplicate text, disabled and obstructed controls, label and test-ID alternatives, hidden state, and an empty inventory. No external application, network asset, form value, or full HTML is retained.
 
 Automatic healing remains absent. The next safe step is additional human-reviewed shadow-mode evidence from diverse applications, not automatic locator replacement.
+
+## Independent shadow holdout
+
+The committed calibration and validation packs remain controlled and repository-visible. They must not be combined with the separate shadow holdout percentage. The holdout workflow imports sanitized diagnosis attachments, stores human expected answers separately, and scores only reviewed observations after blind diagnosis. With zero reviewed observations it reports N/A and an insufficient-sample warning, not 100% accuracy. See [Locator shadow observations](locator-shadow-observations.md).

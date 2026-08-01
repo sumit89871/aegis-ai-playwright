@@ -80,6 +80,13 @@ async function collectDoctorInput(
   let locatorEvaluationThresholdsValid = false;
   let locatorEvaluationDeterministicDefault = false;
   let locatorEvaluationNetworkDisabledDefault = false;
+  let locatorObservationImportable = false;
+  let locatorObservationSchemaValid = false;
+  let locatorObservationReviewSchemaValid = false;
+  let locatorHoldoutDeterministicDefault = false;
+  let locatorHoldoutNetworkDisabledDefault = false;
+  let locatorHoldoutApiKeyNotRequired = false;
+  let locatorHoldoutDoesNotApplyLocators = false;
   let automaticHealingAbsent = false;
   try {
     import.meta.resolve("@aegis/core");
@@ -148,6 +155,30 @@ async function collectDoctorInput(
       "validateLocatorEvaluationThresholds",
       "renderLocatorEvaluationMarkdown",
     ].every((name) => coreExports.includes(name));
+    locatorObservationImportable = [
+      "importLocatorDiagnosisObservation",
+      "validateLocatorObservation",
+      "createLocatorObservationReviewTemplate",
+      "validateLocatorObservationReview",
+      "runLocatorHoldoutEvaluation",
+      "renderLocatorHoldoutMarkdown",
+    ].every((name) => coreExports.includes(name));
+    locatorObservationSchemaValid =
+      core.LOCATOR_OBSERVATION_SCHEMA_VERSION === "1.0.0" &&
+      Array.isArray(core.LOCATOR_OBSERVATION_SOURCE_TYPES) &&
+      core.LOCATOR_OBSERVATION_SOURCE_TYPES.length === 4;
+    locatorObservationReviewSchemaValid =
+      Array.isArray(core.LOCATOR_OBSERVATION_REVIEW_STATUSES) &&
+      core.LOCATOR_OBSERVATION_REVIEW_STATUSES.length === 4;
+    locatorHoldoutDeterministicDefault =
+      core.DEFAULT_LOCATOR_HOLDOUT_MODE === "deterministic-only";
+    locatorHoldoutNetworkDisabledDefault = locatorHoldoutDeterministicDefault;
+    locatorHoldoutApiKeyNotRequired = locatorHoldoutDeterministicDefault;
+    locatorHoldoutDoesNotApplyLocators = ![
+      "applyHoldoutLocator",
+      "replayLocatorObservation",
+      "healFromObservation",
+    ].some((name) => coreExports.includes(name));
     if (
       validateLocatorEvaluationDataset !== undefined &&
       validateLocatorEvaluationThresholds !== undefined &&
@@ -323,6 +354,17 @@ async function collectDoctorInput(
       new URL(".gitignore", repositoryRoot),
       "utf8",
     ).includes("/artifacts/locator-evaluation/"),
+    locatorObservationImportable,
+    locatorObservationSchemaValid,
+    locatorObservationReviewSchemaValid,
+    locatorObservationArtifactsIgnored: readFileSync(
+      new URL(".gitignore", repositoryRoot),
+      "utf8",
+    ).includes("/artifacts/locator-observations/"),
+    locatorHoldoutDeterministicDefault,
+    locatorHoldoutNetworkDisabledDefault,
+    locatorHoldoutApiKeyNotRequired,
+    locatorHoldoutDoesNotApplyLocators,
     automaticHealingAbsent,
     browserExecutablesRequired,
   };

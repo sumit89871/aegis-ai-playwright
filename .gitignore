@@ -29,6 +29,7 @@ temp/
 *.log
 /artifacts/browser-doctor/
 /artifacts/locator-evaluation/
+/artifacts/locator-observations/
 
 # Editors
 .idea/

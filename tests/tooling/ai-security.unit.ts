@@ -94,6 +94,31 @@ await describe("AI foundation security invariants", async () => {
     assert.match(ignore, /\/artifacts\/locator-evaluation\//u);
   });
 
+  await it("keeps shadow observations private and holdout analysis offline", () => {
+    const importer = read(
+      "packages/core/src/locator-observations/locator-observation-importer.ts",
+    );
+    const runner = read(
+      "packages/core/src/locator-observations/locator-holdout-runner.ts",
+    );
+    const holdout = read("scripts/locator-holdout-evaluate.ts");
+    const rootPackage = read("package.json");
+    const ignore = read(".gitignore");
+    assert.match(ignore, /\/artifacts\/locator-observations\//u);
+    assert.match(
+      rootPackage,
+      /"ci:framework": "[^"]*ai:locator:holdout:evaluate/u,
+    );
+    assert.doesNotMatch(
+      `${importer}\n${runner}\n${holdout}`,
+      /OpenRouterAiProvider|OPENROUTER_API_KEY|allowNetworkCalls:\s*true|document\.cookie|localStorage|sessionStorage|innerHTML|outerHTML/u,
+    );
+    assert.doesNotMatch(
+      runner,
+      /click\(|fill\(|press\(|applyLocator|retryWithCandidate|writeFile/u,
+    );
+  });
+
   await it("attaches locator reports only after an unexpected failure", () => {
     const fixture = read("examples/nopcommerce/src/fixtures/test-fixtures.ts");
     const failureGuard = fixture.indexOf(
@@ -137,6 +162,8 @@ await describe("AI foundation security invariants", async () => {
       "packages/core/src/locator-evaluation/evaluation-runner.ts",
       "packages/core/src/locator-evaluation/evaluation-metrics.ts",
       "packages/core/src/locator-evaluation/evaluation-validator.ts",
+      "packages/core/src/locator-observations/locator-holdout-runner.ts",
+      "packages/core/src/locator-observations/locator-observation-validator.ts",
     ];
     for (const file of files) {
       const source = read(file);
