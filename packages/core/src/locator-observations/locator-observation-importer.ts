@@ -74,32 +74,44 @@ function isReport(value: unknown): value is LocatorDiagnosisReport {
   );
 }
 
-function safeCandidate(candidate: LocatorCandidate): LocatorCandidate {
-  const clone = structuredClone(candidate);
+export function mapRuntimeLocatorCandidateToObservationCandidate(
+  candidate: LocatorCandidate,
+): LocatorCandidate {
   const optional = (
     value: string | undefined,
     maximum = 120,
   ): string | undefined => sanitizedText(value, maximum);
   return Object.freeze({
-    ...clone,
-    ...(clone.role === undefined
+    candidateId: requiredSanitizedText(candidate.candidateId, 40),
+    strategy: candidate.strategy,
+    ...(candidate.role === undefined
       ? {}
-      : { role: requiredSanitizedText(clone.role, 80) }),
-    ...(clone.name === undefined
+      : { role: requiredSanitizedText(candidate.role, 80) }),
+    ...(candidate.name === undefined
       ? {}
-      : { name: requiredSanitizedText(clone.name, 120) }),
-    ...(clone.value === undefined
+      : { name: requiredSanitizedText(candidate.name, 120) }),
+    ...(candidate.value === undefined
       ? {}
-      : { value: requiredSanitizedText(clone.value, 120) }),
+      : { value: requiredSanitizedText(candidate.value, 120) }),
+    exact: candidate.exact,
     scopeHint:
-      clone.scopeHint === null ? null : (optional(clone.scopeHint) ?? null),
-    tagName: optional(clone.tagName, 40) ?? "unknown",
+      candidate.scopeHint === null
+        ? null
+        : (optional(candidate.scopeHint) ?? null),
+    tagName: optional(candidate.tagName, 40) ?? "unknown",
+    matchCount: candidate.matchCount,
+    visible: candidate.visible,
+    enabled: candidate.enabled,
+    editable: candidate.editable,
+    hasBoundingBox: candidate.hasBoundingBox,
+    deterministicScore: candidate.deterministicScore,
+    stability: candidate.stability,
     rationale: Object.freeze(
-      clone.rationale.map((entry) => sanitizedText(entry, 200) ?? ""),
+      candidate.rationale.map((entry) => sanitizedText(entry, 200) ?? ""),
     ),
-    ...(clone.countError === undefined
+    ...(candidate.countError === undefined
       ? {}
-      : { countError: requiredSanitizedText(clone.countError, 200) }),
+      : { countError: requiredSanitizedText(candidate.countError, 200) }),
   });
 }
 
@@ -162,7 +174,9 @@ export function importLocatorDiagnosisObservation(
       : { value: requiredSanitizedText(source.expectedTarget, 120) }),
   });
   const candidates = Object.freeze(
-    artifact.candidateInventory.map(safeCandidate),
+    artifact.candidateInventory.map(
+      mapRuntimeLocatorCandidateToObservationCandidate,
+    ),
   );
   const draft = {
     schemaVersion: LOCATOR_OBSERVATION_SCHEMA_VERSION,

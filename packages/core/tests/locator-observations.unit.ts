@@ -8,6 +8,7 @@ import {
   deduplicateLocatorObservations,
   diagnoseLocatorFailure,
   importLocatorDiagnosisObservation,
+  mapRuntimeLocatorCandidateToObservationCandidate,
   rankLocatorCandidates,
   renderLocatorHoldoutMarkdown,
   runLocatorHoldoutEvaluation,
@@ -15,6 +16,7 @@ import {
   validateLocatorObservationReview,
 } from "../src/index.ts";
 import type {
+  LocatorCandidate,
   LocatorDiagnosisReport,
   LocatorObservation,
   LocatorObservationReview,
@@ -37,6 +39,7 @@ async function report(
         enabled: true,
         editable: false,
         hasBoundingBox: true,
+        weakAccessibleNameApproximation: true,
       },
       {
         strategy: "text",
@@ -114,6 +117,137 @@ await describe("locator shadow observation validation", async () => {
     assert.match(value.observationId, /^LOC-OBS-[A-F0-9]{16}$/u);
     assert.equal(value.candidateInventory.length, 2);
     assert.doesNotThrow(() => JSON.stringify(value));
+  });
+
+  await it("maps scorer-only runtime fields into the strict public candidate schema", async () => {
+    const runtimeReport = await report();
+    assert.match(
+      JSON.stringify(runtimeReport.candidateInventory[0]),
+      /weakAccessibleNameApproximation/u,
+    );
+    const imported = importLocatorDiagnosisObservation(runtimeReport, {
+      applicationAlias: "reference-store",
+    });
+    assert.equal(imported.status, "imported");
+    assert.doesNotMatch(
+      JSON.stringify(imported.observation),
+      /weakAccessibleNameApproximation/u,
+    );
+  });
+
+  await it("regresses the controlled real-shadow Search-button failure", async () => {
+    const runtimeReport = await report(
+      "TimeoutError: locator.click: Timeout 5000ms exceeded. waiting for getByRole('button', { name: 'Search catalog', exact: true })",
+    );
+    const imported = importLocatorDiagnosisObservation(runtimeReport, {
+      applicationAlias: "reference-store",
+      sourceType: "real-shadow",
+    });
+    assert.equal(imported.status, "imported");
+    assert.equal(
+      imported.observation.deterministicDiagnosis.classification,
+      "selector-no-match",
+    );
+    assert.equal(
+      imported.observation.candidateInventory[0]?.candidateId,
+      "LOCATOR-001",
+    );
+    assert.doesNotMatch(
+      JSON.stringify(imported.observation),
+      /weakAccessibleNameApproximation/u,
+    );
+  });
+
+  await it("preserves every public candidate field while excluding unknown runtime data", async () => {
+    const candidate = (await report()).candidateInventory[0];
+    assert.ok(candidate !== undefined);
+    const runtimeCandidate = {
+      ...candidate,
+      value: "Search value",
+      scopeHint: "header",
+      countError: "Count was unavailable safely.",
+      weakAccessibleNameApproximation: true,
+      futureRuntimeField: "internal-only",
+      unsafeRuntimeHtml: '<input value="private">',
+      runtimeSecret: "password=private",
+    } as LocatorCandidate;
+    const before = structuredClone(runtimeCandidate);
+    const first =
+      mapRuntimeLocatorCandidateToObservationCandidate(runtimeCandidate);
+    const second =
+      mapRuntimeLocatorCandidateToObservationCandidate(runtimeCandidate);
+    assert.deepEqual(first, second);
+    assert.deepEqual(runtimeCandidate, before);
+    assert.deepEqual(first, {
+      candidateId: candidate.candidateId,
+      strategy: candidate.strategy,
+      role: candidate.role,
+      name: candidate.name,
+      value: "Search value",
+      exact: candidate.exact,
+      scopeHint: "header",
+      tagName: candidate.tagName,
+      matchCount: candidate.matchCount,
+      visible: candidate.visible,
+      enabled: candidate.enabled,
+      editable: candidate.editable,
+      hasBoundingBox: candidate.hasBoundingBox,
+      deterministicScore: candidate.deterministicScore,
+      stability: candidate.stability,
+      rationale: candidate.rationale,
+      countError: "Count was unavailable safely.",
+    });
+    const serialized = JSON.stringify(first);
+    assert.doesNotMatch(
+      serialized,
+      /weakAccessibleNameApproximation|futureRuntimeField|unsafeRuntimeHtml|runtimeSecret|private|<input/iu,
+    );
+    assert.doesNotThrow(() => JSON.parse(serialized) as unknown);
+  });
+
+  await it("preserves candidate IDs, scores, and ordering during import", async () => {
+    const runtimeReport = await report();
+    const imported = importLocatorDiagnosisObservation(runtimeReport, {
+      applicationAlias: "reference-store",
+    });
+    assert.equal(imported.status, "imported");
+    assert.deepEqual(
+      imported.observation.candidateInventory.map(
+        ({ candidateId, deterministicScore }) => ({
+          candidateId,
+          deterministicScore,
+        }),
+      ),
+      runtimeReport.candidateInventory.map(
+        ({ candidateId, deterministicScore }) => ({
+          candidateId,
+          deterministicScore,
+        }),
+      ),
+    );
+  });
+
+  await it("continues rejecting internal fields supplied directly to the public schema", async () => {
+    const base = await observation();
+    const draft = {
+      ...structuredClone(base),
+      observationId: "",
+      candidateInventory: [
+        {
+          ...structuredClone(base.candidateInventory[0]),
+          weakAccessibleNameApproximation: true,
+        },
+        ...structuredClone(base.candidateInventory.slice(1)),
+      ],
+    };
+    const value = {
+      ...draft,
+      observationId: createLocatorObservationId(draft),
+    };
+    assert.throws(
+      () => validateLocatorObservation(value),
+      /candidate\.weakAccessibleNameApproximation is unsupported/u,
+    );
   });
 
   await it("creates deterministic anonymous IDs", async () => {
