@@ -46,6 +46,41 @@ await describe("AI foundation security invariants", async () => {
     assert.doesNotMatch(fixture, /createAiClient|OpenRouterAiProvider/u);
   });
 
+  await it("keeps locator diagnosis advisory, bounded, and offline", () => {
+    const demo = read("scripts/ai-locator-demo.ts");
+    const fixture = read("examples/nopcommerce/src/fixtures/test-fixtures.ts");
+    const collector = read(
+      "packages/core/src/locator-diagnosis/locator-candidate-collector.ts",
+    );
+    const client = read(
+      "packages/core/src/locator-diagnosis/locator-diagnosis-client.ts",
+    );
+    assert.match(demo, /new MockAiProvider/u);
+    assert.match(demo, /allowNetworkCalls: false/u);
+    assert.match(demo, /networkCalls: 0/u);
+    assert.doesNotMatch(demo, /OpenRouterAiProvider|OPENROUTER_API_KEY/u);
+    assert.match(fixture, /defaultLocatorDiagnosisConfiguration\(\)/u);
+    assert.doesNotMatch(fixture, /createAiClient|OpenRouterAiProvider/u);
+    assert.doesNotMatch(
+      `${collector}\n${client}`,
+      /innerHTML|outerHTML|localStorage|sessionStorage|document\.cookie|child_process|writeFile|click\(|fill\(|press\(/u,
+    );
+  });
+
+  await it("attaches locator reports only after an unexpected failure", () => {
+    const fixture = read("examples/nopcommerce/src/fixtures/test-fixtures.ts");
+    const failureGuard = fixture.indexOf(
+      "testInfo.status !== testInfo.expectedStatus",
+    );
+    const generalAnalysis = fixture.indexOf("await createFailureAnalysis(");
+    const locatorAnalysis = fixture.indexOf("await createLocatorDiagnosis(");
+    assert.ok(failureGuard >= 0);
+    assert.ok(generalAnalysis > failureGuard);
+    assert.ok(locatorAnalysis > generalAnalysis);
+    assert.match(fixture, /locator-diagnosis\.json/u);
+    assert.match(fixture, /locator-diagnosis\.md/u);
+  });
+
   await it("guards optional OpenRouter verification behind explicit consent", () => {
     const verification = read("scripts/ai-openrouter-verify.ts");
     const rootPackage = read("package.json");
@@ -70,6 +105,8 @@ await describe("AI foundation security invariants", async () => {
       "packages/core/src/ai-analysis/failure-analysis-client.ts",
       "packages/core/src/ai-analysis/deterministic-failure-analysis.ts",
       "packages/core/src/ai-analysis/failure-analysis-validator.ts",
+      "packages/core/src/locator-diagnosis/locator-diagnosis-client.ts",
+      "packages/core/src/locator-diagnosis/deterministic-locator-diagnosis.ts",
     ];
     for (const file of files) {
       const source = read(file);
@@ -77,6 +114,11 @@ await describe("AI foundation security invariants", async () => {
       assert.doesNotMatch(source, /writeFile|apply_patch|git\s+commit/u);
       assert.doesNotMatch(source, /\beval\s*\(|new\s+Function\s*\(/u);
     }
+    const locatorValidator = read(
+      "packages/core/src/locator-diagnosis/locator-diagnosis-validator.ts",
+    );
+    assert.match(locatorValidator, /child_process/u);
+    assert.match(locatorValidator, /begin patch/u);
   });
 
   await it("contains no dynamic model-code execution primitive", () => {

@@ -69,6 +69,12 @@ async function collectDoctorInput(
   let aiOpenRouterEndpointValid = false;
   let failureAnalysisImportable = false;
   let failureAnalysisSafeDefault = false;
+  let locatorDiagnosisImportable = false;
+  let locatorDiagnosisDeterministicDefault = false;
+  let locatorDiagnosisAiDisabledDefault = false;
+  let locatorDiagnosisLimitsValid = false;
+  let locatorDiagnosisMockAvailable = false;
+  let automaticHealingAbsent = false;
   try {
     import.meta.resolve("@aegis/core");
     coreResolvable = true;
@@ -94,6 +100,9 @@ async function collectDoctorInput(
     const defaultFailureAnalysisConfiguration =
       core.defaultFailureAnalysisConfiguration as
         (() => Readonly<Record<string, unknown>>) | undefined;
+    const defaultLocatorDiagnosisConfiguration =
+      core.defaultLocatorDiagnosisConfiguration as
+        (() => Readonly<Record<string, unknown>>) | undefined;
     aiConfigurationImportable = [
       "createAiClient",
       "defaultAiConfiguration",
@@ -107,6 +116,32 @@ async function collectDoctorInput(
       "defaultFailureAnalysisConfiguration",
       "renderFailureAnalysisMarkdown",
     ].every((name) => coreExports.includes(name));
+    locatorDiagnosisImportable = [
+      "classifyLocatorFailure",
+      "collectLocatorCandidates",
+      "diagnoseLocatorFailure",
+      "diagnoseLocatorDeterministically",
+      "renderLocatorDiagnosisMarkdown",
+    ].every((name) => coreExports.includes(name));
+    if (defaultLocatorDiagnosisConfiguration !== undefined) {
+      const defaults = defaultLocatorDiagnosisConfiguration();
+      locatorDiagnosisDeterministicDefault =
+        defaults.enabled === true && defaults.deterministicEnabled === true;
+      locatorDiagnosisAiDisabledDefault =
+        defaults.mode === "deterministic-only" &&
+        defaults.aiAdvisoryEnabled === false;
+      locatorDiagnosisLimitsValid =
+        typeof defaults.maximumDurationMs === "number" &&
+        defaults.maximumDurationMs <= 10_000 &&
+        typeof defaults.maximumCandidates === "number" &&
+        defaults.maximumCandidates <= 100;
+    }
+    automaticHealingAbsent = ![
+      "healLocator",
+      "replaceLocator",
+      "applyLocatorRepair",
+      "retryWithCandidate",
+    ].some((name) => coreExports.includes(name));
     if (defaultFailureAnalysisConfiguration !== undefined) {
       const defaults = defaultFailureAnalysisConfiguration();
       failureAnalysisSafeDefault =
@@ -140,6 +175,8 @@ async function collectDoctorInput(
         typeof openRouterConfiguration.endpoint === "string" &&
         openRouterConfiguration.endpoint.startsWith("https://");
     }
+    locatorDiagnosisMockAvailable =
+      locatorDiagnosisImportable && aiMockProviderAvailable;
   } catch {
     coreImportable = false;
   }
@@ -222,6 +259,12 @@ async function collectDoctorInput(
     })(),
     failureAnalysisImportable,
     failureAnalysisSafeDefault,
+    locatorDiagnosisImportable,
+    locatorDiagnosisDeterministicDefault,
+    locatorDiagnosisAiDisabledDefault,
+    locatorDiagnosisLimitsValid,
+    locatorDiagnosisMockAvailable,
+    automaticHealingAbsent,
     browserExecutablesRequired,
   };
 }

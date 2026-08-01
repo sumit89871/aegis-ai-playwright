@@ -64,3 +64,4 @@ Results retain bounded rule IDs, impacts, help, sanitized target selectors, fail
 Rule exclusions require a rule ID, reason, and scope; an issue reference may also be supplied. Anonymous exclusions are invalid. Exclusions belong to the consumer that owns the page, never to generic core policy merely to obtain a green result.
 
 Automated scans find common machine-detectable problems but do not prove accessibility compliance. Keyboard navigation, screen-reader output, focus order, content meaning, zoom/reflow, and cognitive usability still require manual and broader testing.
+Failed-locator suggestions follow this policy in shadow mode. The deterministic scorer prefers unique semantic locators and never proposes XPath or positional repairs. Hidden, disabled, obstructed, and unready elements normally lead to investigation of state rather than a replacement locator. Suggestions are never applied automatically.

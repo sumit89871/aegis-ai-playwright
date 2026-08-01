@@ -50,6 +50,12 @@ export interface FrameworkDoctorInput {
   readonly aiExampleContainsSecret: boolean;
   readonly failureAnalysisImportable: boolean;
   readonly failureAnalysisSafeDefault: boolean;
+  readonly locatorDiagnosisImportable: boolean;
+  readonly locatorDiagnosisDeterministicDefault: boolean;
+  readonly locatorDiagnosisAiDisabledDefault: boolean;
+  readonly locatorDiagnosisLimitsValid: boolean;
+  readonly locatorDiagnosisMockAvailable: boolean;
+  readonly automaticHealingAbsent: boolean;
   readonly browserExecutablesRequired?: boolean;
 }
 
@@ -331,6 +337,42 @@ export function evaluateFrameworkDoctor(
       "Failure analysis defaults to deterministic-only advisory mode",
       "Failure analysis default could permit an unexpected AI provider call",
     ),
+    check(
+      "locator-diagnosis-import",
+      input.locatorDiagnosisImportable,
+      "Advisory locator-diagnosis APIs import successfully",
+      "Advisory locator-diagnosis APIs are unavailable",
+    ),
+    check(
+      "locator-diagnosis-deterministic-default",
+      input.locatorDiagnosisDeterministicDefault,
+      "Locator diagnosis is deterministic by default",
+      "Locator diagnosis deterministic defaults are unsafe",
+    ),
+    check(
+      "locator-diagnosis-ai-default",
+      input.locatorDiagnosisAiDisabledDefault,
+      "AI locator ranking is disabled and offline by default",
+      "AI locator ranking may run unexpectedly",
+    ),
+    check(
+      "locator-diagnosis-limits",
+      input.locatorDiagnosisLimitsValid,
+      "Locator candidate and duration limits are bounded",
+      "Locator diagnosis limits are invalid",
+    ),
+    check(
+      "locator-diagnosis-mock",
+      input.locatorDiagnosisMockAvailable,
+      "Offline mock locator analysis is available",
+      "Offline mock locator analysis is unavailable",
+    ),
+    check(
+      "automatic-healing-absent",
+      input.automaticHealingAbsent,
+      "Automatic locator healing capability is absent",
+      "Automatic locator healing capability was detected",
+    ),
   ]);
   const summary = summarizeDoctorChecks(checks);
   const status: DoctorStatus =
@@ -367,6 +409,12 @@ const DOCTOR_CHECK_LABELS: Readonly<Record<string, string>> = Object.freeze({
   "ai-example-secret": "AI example secret hygiene",
   "failure-analysis-import": "Failure analysis import",
   "failure-analysis-safe-default": "Failure analysis safe default",
+  "locator-diagnosis-import": "Locator diagnosis import",
+  "locator-diagnosis-deterministic-default": "Locator deterministic default",
+  "locator-diagnosis-ai-default": "Locator AI disabled by default",
+  "locator-diagnosis-limits": "Locator diagnosis limits",
+  "locator-diagnosis-mock": "Offline locator mock",
+  "automatic-healing-absent": "Automatic healing absent",
 });
 
 export function renderFrameworkDoctor(result: FrameworkDoctorResult): string {

@@ -201,3 +201,11 @@ npm run ai:analyse:demo -- --json
 ```
 
 The feature does not heal or replace locators, generate or modify tests, plan tests, analyse screenshots, execute tools, or apply remediation. Deterministic UI tests remain fully functional without AI. See the [AI foundation guide](docs/ai-foundation.md) and [advisory failure-analysis guide](docs/ai-failure-analysis.md).
+Advisory locator diagnosis is also deterministic-first and offline by default. On an applicable failed locator it can attach ranked, structured alternatives for human review; it never heals, retries, edits source, or changes the failure. AI, when explicitly enabled, may rank only candidates already created by deterministic code.
+
+```powershell
+npm run ai:locator:demo
+npm run ai:locator:demo -- --json
+```
+
+See [Advisory UI locator diagnosis](docs/ai-locator-diagnosis.md) for the evidence boundary, scoring policy, and limitations.

@@ -64,6 +64,8 @@ jobs:
         run: |
           set -o pipefail
           npm run --silent doctor:browsers -- --browser=${{ matrix.browser }} --json | tee artifacts/browser-doctor/${{ matrix.browser }}.json
+      - name: Run locator candidate browser integration
+        run: npm run test:locator:browser -- --browser=${{ matrix.browser }}
       - name: Upload browser-doctor result
         if: always()
         uses: actions/upload-artifact@v7

@@ -54,6 +54,7 @@ await describe("GitHub Actions workflow structure", async () => {
     assert.match(rootPackage, /"ci:framework": "[^"]*npm run ui:policy/u);
     assert.match(rootPackage, /"ci:framework": "[^"]*npm run ai:smoke/u);
     assert.match(rootPackage, /"ci:framework": "[^"]*npm run ai:analyse:demo/u);
+    assert.match(rootPackage, /"ci:framework": "[^"]*npm run ai:locator:demo/u);
     assert.doesNotMatch(frameworkQuality, /test:accessibility/u);
     assert.doesNotMatch(
       frameworkQuality,
@@ -69,6 +70,10 @@ await describe("GitHub Actions workflow structure", async () => {
     assert.match(
       frameworkWorkflow,
       /doctor:browsers -- --browser=\$\{\{ matrix\.browser \}\} --json/u,
+    );
+    assert.match(
+      frameworkWorkflow,
+      /test:locator:browser -- --browser=\$\{\{ matrix\.browser \}\}/u,
     );
     assert.match(frameworkWorkflow, /if: always\(\)/u);
     assert.match(frameworkWorkflow, /actions\/upload-artifact@v7/u);

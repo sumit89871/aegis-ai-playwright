@@ -51,3 +51,4 @@ npm run ci:framework
 ```
 
 Future work may connect sanitized real evidence to OpenRouter after an explicit privacy, model, pricing, and network review. This milestone does not implement self-healing, source modification, test generation, screenshot analysis, or automated remediation.
+General failure analysis remains the primary classification report. For a locator-related failure, the consumer fixture may additionally create the separate canonical `locator-diagnosis.json` and `locator-diagnosis.md` reports. Non-locator failures do not trigger candidate collection. Details are in [Advisory UI locator diagnosis](ai-locator-diagnosis.md).

@@ -229,3 +229,13 @@ The shared public demo returned Cloudflare HTTP 403 human-verification pages to 
 ## Why this is an example
 
 This project proves the consumer boundary: it imports generic configuration support through `@aegis/core`, while core has no knowledge of this application. Future client projects can follow the same structure and may eventually live in separate repositories after framework packages are prepared for private-registry publication.
+Applicable locator failures also receive `locator-diagnosis.json` and `locator-diagnosis.md`. The nopCommerce fixture enables deterministic diagnosis only; AI ranking is off, no key is resolved, and no network request occurs. Candidate collection happens while the failed page is still available and retains only bounded semantic element information—never form values, full HTML, screenshots, or traces. Passing tests and non-locator failures, including the known accessibility contrast failure, receive no misleading locator suggestions.
+
+Try the application-independent offline example from the repository root:
+
+```powershell
+npm run ai:locator:demo
+npm run ai:locator:demo -- --json
+```
+
+This is shadow/advisory mode. A person must review any suggestion and update the owning Page Object manually; the framework never edits or reruns the test.

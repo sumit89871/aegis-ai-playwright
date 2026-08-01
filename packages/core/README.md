@@ -71,3 +71,7 @@ The core metadata contract gives every automated test a stable test ID, human-re
 The converter creates Playwright-native tags and annotations, while the consumer remains responsible for choosing application-specific values and maintaining its requirement catalog. Core never parses business identifiers from test-title strings.
 
 A future monetary utility may belong here only when it supports explicit locale and currency configuration and has a real consumer. A consumer-specific currency parser should remain with that consumer until then.
+
+## Advisory locator diagnosis
+
+The `locator-diagnosis` exports provide controlled Playwright error classification, conservative target-intent inference, bounded read-only candidate collection, uniqueness measurement, deterministic scoring, strict report validation, optional mock/provider ranking of known IDs, and safe JSON/Markdown rendering. Defaults are deterministic-only with AI disabled. These APIs do not retry actions, write source, or implement self-healing.

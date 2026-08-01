@@ -3,9 +3,12 @@ import { writeFile } from "node:fs/promises";
 import {
   analyseUiFailure,
   createBrowserDiagnosticsCollector,
+  defaultLocatorDiagnosisConfiguration,
+  diagnoseLocatorFailure,
   defaultFailureAnalysisConfiguration,
   redactSensitiveText,
   renderFailureAnalysisMarkdown,
+  renderLocatorDiagnosisMarkdown,
   runAccessibilityScan,
   sanitizeUrl,
 } from "@aegis/core";
@@ -15,6 +18,7 @@ import type {
   AiClient,
   FailureAnalysisConfiguration,
   FailureEvidenceInput,
+  LocatorDiagnosisConfiguration,
   PageReadinessFailureDetails,
 } from "@aegis/core";
 import { test as base } from "@playwright/test";
@@ -33,6 +37,8 @@ interface AegisFixtures {
   readonly accessibility: AccessibilityFixture;
   readonly failureAnalysisConfiguration: FailureAnalysisConfiguration;
   readonly failureAnalysisAiClient: AiClient | undefined;
+  readonly locatorDiagnosisConfiguration: LocatorDiagnosisConfiguration;
+  readonly locatorDiagnosisAiClient: AiClient | undefined;
   readonly header: HeaderComponent;
   readonly browserDiagnostics: undefined;
   readonly addProductToCartFlow: AddProductToCartFlow;
@@ -54,6 +60,7 @@ const accessibilityEvidenceByTest = new WeakMap<
   AccessibilityScanResult
 >();
 const FAILURE_ANALYSIS_CONFIGURATION = defaultFailureAnalysisConfiguration();
+const LOCATOR_DIAGNOSIS_CONFIGURATION = defaultLocatorDiagnosisConfiguration();
 
 function addDiagnosticsWarning(testInfo: TestInfo, error: unknown): void {
   const message =
@@ -208,15 +215,70 @@ async function createFailureAnalysis(
   }
 }
 
+async function createLocatorDiagnosis(
+  testInfo: TestInfo,
+  page: Parameters<typeof diagnoseLocatorFailure>[0]["page"],
+  configuration: LocatorDiagnosisConfiguration,
+  aiClient: AiClient | undefined,
+): Promise<void> {
+  const message = testInfo.error?.message;
+  if (message === undefined) return;
+  const pageAvailable = page !== undefined && !page.isClosed();
+  const testId = annotationValue(testInfo, "test-id");
+  const feature = annotationValue(testInfo, "feature");
+  const readinessFailure = readinessFailureFrom(testInfo);
+  const report = await diagnoseLocatorFailure({
+    evidence: {
+      errorMessage: message,
+      ...(pageAvailable ? { pageUrl: page.url() } : {}),
+      ...(readinessFailure === undefined ? {} : { pageReady: false }),
+      pageReadinessReason:
+        readinessFailure?.error ?? "No page-readiness failure was recorded.",
+      pageAvailable,
+      projectName: testInfo.project.name,
+      retry: testInfo.retry,
+      ...(testId === undefined ? {} : { testId }),
+      ...(feature === undefined ? {} : { feature }),
+      requirementIds: annotationValues(testInfo, "requirement"),
+    },
+    ...(page === undefined ? {} : { page }),
+    configuration,
+    ...(aiClient === undefined ? {} : { aiClient }),
+  });
+  if (report.conclusion.recommendationStatus === "not-applicable") return;
+  if (configuration.attachJson) {
+    await attachJson(testInfo, "locator-diagnosis.json", report);
+  }
+  if (configuration.attachMarkdown) {
+    await attachMarkdown(
+      testInfo,
+      "locator-diagnosis.md",
+      renderLocatorDiagnosisMarkdown(report),
+    );
+  }
+}
+
 export const test = base.extend<AegisFixtures>({
   failureAnalysisConfiguration: [
     FAILURE_ANALYSIS_CONFIGURATION,
     { option: true },
   ],
   failureAnalysisAiClient: [undefined, { option: true }],
+  locatorDiagnosisConfiguration: [
+    LOCATOR_DIAGNOSIS_CONFIGURATION,
+    { option: true },
+  ],
+  locatorDiagnosisAiClient: [undefined, { option: true }],
   browserDiagnostics: [
     async (
-      { context, page, failureAnalysisConfiguration, failureAnalysisAiClient },
+      {
+        context,
+        page,
+        failureAnalysisConfiguration,
+        failureAnalysisAiClient,
+        locatorDiagnosisConfiguration,
+        locatorDiagnosisAiClient,
+      },
       use,
       testInfo,
     ): Promise<void> => {
@@ -289,6 +351,17 @@ export const test = base.extend<AegisFixtures>({
                   snapshot,
                   failureAnalysisConfiguration,
                   failureAnalysisAiClient,
+                );
+              } catch (error) {
+                addDiagnosticsWarning(testInfo, error);
+              }
+
+              try {
+                await createLocatorDiagnosis(
+                  testInfo,
+                  page,
+                  locatorDiagnosisConfiguration,
+                  locatorDiagnosisAiClient,
                 );
               } catch (error) {
                 addDiagnosticsWarning(testInfo, error);
