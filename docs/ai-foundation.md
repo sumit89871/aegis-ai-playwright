@@ -72,7 +72,11 @@ When an exact tokenizer is unavailable, the estimate conservatively uses one tok
 
 ## OpenRouter adapter
 
-The adapter uses the built-in HTTP client surface through `fetch`, bearer authentication, JSON requests, and `AbortController`. It retries only through the generic client and only for transient conditions such as HTTP 429 or 5xx responses. Authentication and malformed requests are not retried. `Retry-After` is bounded, response size is bounded, and HTTP error bodies are not retained or emitted.
+The adapter uses the built-in HTTP client surface through `fetch`, bearer authentication, JSON requests, and `AbortController`. It maps the provider-neutral output limit to OpenRouter's `max_completion_tokens`. Requests explicitly disable and exclude reasoning where the selected model supports that OpenRouter option; reasoning is never substituted for missing final answer content.
+
+Final content may be a string or an array containing only recognized text parts. Unsupported parts, empty output, truncation, provider finish errors, malformed shapes, and oversized output have distinct safe error codes. Safe error metadata can include counts, model and finish identifiers, token counts, content shape, and a validated provider request ID. It never includes final content, reasoning content, prompts, request bodies, response bodies, or authorization data.
+
+The adapter retries only through the generic client and only for transient conditions such as HTTP 429 or 5xx responses. Authentication and malformed requests are not retried. `Retry-After` is bounded, response size is bounded, and HTTP error bodies are not retained or emitted. The guarded verification uses a 128-completion-token allowance, a 15-second timeout, zero retries, structured validation, and the existing $0.01 estimated-cost ceiling.
 
 No real OpenRouter request is made by repository tests or CI. A future explicitly authorized local integration test must verify a currently available model, actual provider response semantics, and current pricing without committing a key or output log.
 

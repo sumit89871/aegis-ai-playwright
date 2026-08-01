@@ -40,6 +40,7 @@ export interface AiGenerationRequest {
 export interface AiTokenUsage {
   readonly inputTokens?: number;
   readonly outputTokens?: number;
+  readonly reasoningTokens?: number;
   readonly totalTokens?: number;
 }
 

@@ -29,12 +29,16 @@ async function startServer(
     request: IncomingMessage,
     response: ServerResponse,
     count: number,
-  ) => void,
+  ) => void | Promise<void>,
 ): Promise<LocalServer> {
   const requests: IncomingMessage[] = [];
   const server = createServer((request, response) => {
     requests.push(request);
-    handler(request, response, requests.length);
+    void Promise.resolve(handler(request, response, requests.length)).catch(
+      () => {
+        response.destroy();
+      },
+    );
   });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -58,6 +62,21 @@ async function startServer(
   };
   servers.push(result);
   return result;
+}
+
+async function readJsonRequest(
+  request: IncomingMessage,
+): Promise<Readonly<Record<string, unknown>>> {
+  request.setEncoding("utf8");
+  const chunks: string[] = [];
+  for await (const requestChunk of request) {
+    const chunk: unknown = requestChunk;
+    if (typeof chunk !== "string") {
+      throw new Error("Temporary AI test server received a non-text chunk.");
+    }
+    chunks.push(chunk);
+  }
+  return JSON.parse(chunks.join("")) as Readonly<Record<string, unknown>>;
 }
 
 afterEach(async () => {
@@ -98,7 +117,7 @@ const clientRequest: AiClientRequest = Object.freeze({
   capability: "synthetic-classification",
 });
 
-function completionBody(content = '{"result":"ok"}'): string {
+function completionBody(content: unknown = '{"result":"ok"}'): string {
   return JSON.stringify({
     id: "request-safe-1",
     model: "vendor/model-v1",
@@ -136,8 +155,10 @@ function clientFor(
 await describe("OpenRouter AI provider", async () => {
   await it("sends bearer authentication and returns bounded provider data", async () => {
     let authorization = "";
-    const server = await startServer((request, response) => {
+    let requestBody: Readonly<Record<string, unknown>> = Object.freeze({});
+    const server = await startServer(async (request, response) => {
       authorization = request.headers.authorization ?? "";
+      requestBody = await readJsonRequest(request);
       response.writeHead(200, { "content-type": "application/json" });
       response.end(completionBody());
     });
@@ -146,6 +167,13 @@ await describe("OpenRouter AI provider", async () => {
       apiKey: "synthetic-test-key",
     });
     assert.equal(authorization, "Bearer synthetic-test-key");
+    assert.equal(requestBody.max_completion_tokens, 100);
+    assert.equal(requestBody.max_tokens, undefined);
+    assert.deepEqual(requestBody.reasoning, {
+      effort: "none",
+      exclude: true,
+    });
+    assert.deepEqual(requestBody.response_format, { type: "json_object" });
     assert.equal(result.text, '{"result":"ok"}');
     assert.doesNotMatch(JSON.stringify(result), /synthetic-test-key/u);
   });
@@ -245,7 +273,338 @@ await describe("OpenRouter AI provider", async () => {
         apiKey: "synthetic-test-key",
       }),
       (error: unknown) =>
-        error instanceof AiError && error.code === "provider-response-invalid",
+        error instanceof AiError &&
+        error.code === "provider-response-malformed",
+    );
+  });
+
+  await it("joins recognized array text parts deterministically", async () => {
+    const server = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        completionBody([
+          { type: "text", text: '{"result":' },
+          { type: "text", text: '"ok"}' },
+        ]),
+      );
+    });
+    const result = await new OpenRouterAiProvider().generate(providerRequest, {
+      endpoint: server.endpoint,
+      apiKey: "synthetic-test-key",
+    });
+    assert.equal(result.text, '{"result":"ok"}');
+  });
+
+  await it("rejects null final content without using private reasoning", async () => {
+    const privateReasoning = "private-reasoning-must-not-escape";
+    const server = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: "request-safe-null",
+          model: "router/selected-model",
+          choices: [
+            {
+              message: { content: null, reasoning: privateReasoning },
+              finish_reason: "stop",
+              native_finish_reason: "stop",
+            },
+          ],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 12,
+            reasoning_tokens: 12,
+            total_tokens: 22,
+          },
+        }),
+      );
+    });
+    await assert.rejects(
+      new OpenRouterAiProvider().generate(providerRequest, {
+        endpoint: server.endpoint,
+        apiKey: "synthetic-test-key",
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof AiError);
+        assert.equal(error.code, "provider-response-empty");
+        assert.deepEqual(error.responseMetadata, {
+          httpCategory: "success",
+          returnedModel: "router/selected-model",
+          completionTokens: 12,
+          reasoningTokens: 12,
+          providerRequestId: "request-safe-null",
+          choicesCount: 1,
+          finishReason: "stop",
+          nativeFinishReason: "stop",
+          contentKind: "null",
+          reasoningPresent: true,
+        });
+        assert.doesNotMatch(
+          `${error.message}${JSON.stringify(error)}`,
+          new RegExp(privateReasoning, "u"),
+        );
+        return true;
+      },
+    );
+  });
+
+  await it("rejects empty final content explicitly", async () => {
+    const server = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(completionBody(""));
+    });
+    await assert.rejects(
+      new OpenRouterAiProvider().generate(providerRequest, {
+        endpoint: server.endpoint,
+        apiKey: "synthetic-test-key",
+      }),
+      (error: unknown) =>
+        error instanceof AiError &&
+        error.code === "provider-response-empty" &&
+        error.responseMetadata?.contentKind === "string" &&
+        error.responseMetadata.contentCharacterCount === 0,
+    );
+  });
+
+  await it("reports missing final content without inspecting other fields", async () => {
+    const server = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          choices: [{ message: {}, finish_reason: "stop" }],
+        }),
+      );
+    });
+    await assert.rejects(
+      new OpenRouterAiProvider().generate(providerRequest, {
+        endpoint: server.endpoint,
+        apiKey: "synthetic-test-key",
+      }),
+      (error: unknown) =>
+        error instanceof AiError &&
+        error.code === "provider-response-empty" &&
+        error.responseMetadata?.contentKind === "missing",
+    );
+  });
+
+  await it("rejects unsupported scalar final content", async () => {
+    const server = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(completionBody(42));
+    });
+    await assert.rejects(
+      new OpenRouterAiProvider().generate(providerRequest, {
+        endpoint: server.endpoint,
+        apiKey: "synthetic-test-key",
+      }),
+      (error: unknown) =>
+        error instanceof AiError &&
+        error.code === "provider-response-malformed" &&
+        error.responseMetadata?.contentKind === "unsupported",
+    );
+  });
+
+  await it("classifies finish_reason length as output truncation", async () => {
+    const server = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: "request-truncated",
+          model: "vendor/model-v1",
+          choices: [
+            {
+              message: { content: '{"result":' },
+              finish_reason: "length",
+              native_finish_reason: "max_tokens",
+            },
+          ],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 100,
+            completion_tokens_details: { reasoning_tokens: 70 },
+            total_tokens: 110,
+          },
+        }),
+      );
+    });
+    await assert.rejects(
+      new OpenRouterAiProvider().generate(providerRequest, {
+        endpoint: server.endpoint,
+        apiKey: "synthetic-test-key",
+      }),
+      (error: unknown) =>
+        error instanceof AiError &&
+        error.code === "provider-output-truncated" &&
+        error.responseMetadata?.finishReason === "length" &&
+        error.responseMetadata.nativeFinishReason === "max_tokens" &&
+        error.responseMetadata.completionTokens === 100 &&
+        error.responseMetadata.reasoningTokens === 70,
+    );
+  });
+
+  await it("classifies an error finish state separately", async () => {
+    const server = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          choices: [{ message: { content: null }, finish_reason: "error" }],
+        }),
+      );
+    });
+    await assert.rejects(
+      new OpenRouterAiProvider().generate(providerRequest, {
+        endpoint: server.endpoint,
+        apiKey: "synthetic-test-key",
+      }),
+      (error: unknown) =>
+        error instanceof AiError && error.code === "provider-finish-error",
+    );
+  });
+
+  for (const [name, body, expectedChoices] of [
+    ["missing choices", { model: "vendor/model-v1" }, undefined],
+    ["an empty choices array", { choices: [] }, 0],
+    ["a malformed message", { choices: [{ message: "invalid" }] }, 1],
+  ] as const) {
+    await it(`rejects ${name} as a malformed response`, async () => {
+      const server = await startServer((_request, response) => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(body));
+      });
+      await assert.rejects(
+        new OpenRouterAiProvider().generate(providerRequest, {
+          endpoint: server.endpoint,
+          apiKey: "synthetic-test-key",
+        }),
+        (error: unknown) =>
+          error instanceof AiError &&
+          error.code === "provider-response-malformed" &&
+          error.responseMetadata?.choicesCount === expectedChoices,
+      );
+    });
+  }
+
+  await it("rejects valid final content above the safe character limit", async () => {
+    const server = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(completionBody("x".repeat(1_000_001)));
+    });
+    await assert.rejects(
+      new OpenRouterAiProvider().generate(providerRequest, {
+        endpoint: server.endpoint,
+        apiKey: "synthetic-test-key",
+      }),
+      (error: unknown) =>
+        error instanceof AiError &&
+        error.code === "provider-output-oversized" &&
+        error.responseMetadata?.contentCharacterCount === 1_000_001,
+    );
+  });
+
+  await it("rejects unsupported array content parts", async () => {
+    const unsafeArguments = "private-tool-arguments";
+    const server = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        completionBody([{ type: "tool_call", arguments: unsafeArguments }]),
+      );
+    });
+    await assert.rejects(
+      new OpenRouterAiProvider().generate(providerRequest, {
+        endpoint: server.endpoint,
+        apiKey: "synthetic-test-key",
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof AiError);
+        assert.equal(error.code, "provider-response-malformed");
+        assert.doesNotMatch(
+          `${error.message}${JSON.stringify(error)}`,
+          new RegExp(unsafeArguments, "u"),
+        );
+        return true;
+      },
+    );
+  });
+
+  await it("handles a provider error inside an HTTP-success response", async () => {
+    const providerDetail = "private-provider-detail";
+    const server = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: "request-provider-error",
+          model: "vendor/model-v1",
+          error: { message: providerDetail },
+        }),
+      );
+    });
+    await assert.rejects(
+      new OpenRouterAiProvider().generate(providerRequest, {
+        endpoint: server.endpoint,
+        apiKey: "synthetic-test-key",
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof AiError);
+        assert.equal(error.code, "provider-finish-error");
+        assert.doesNotMatch(
+          `${error.message}${JSON.stringify(error)}`,
+          new RegExp(providerDetail, "u"),
+        );
+        return true;
+      },
+    );
+  });
+
+  await it("retains safe reasoning-token usage and the selected router model", async () => {
+    const server = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: "generation-safe-1",
+          model: "selected/free-model-v2",
+          choices: [
+            { message: { content: '{"result":"ok"}' }, finish_reason: "stop" },
+          ],
+          usage: {
+            prompt_tokens: 11,
+            completion_tokens: 9,
+            completion_tokens_details: { reasoning_tokens: 3 },
+            total_tokens: 20,
+          },
+        }),
+      );
+    });
+    const result = await new OpenRouterAiProvider().generate(providerRequest, {
+      endpoint: server.endpoint,
+      apiKey: "synthetic-test-key",
+    });
+    assert.equal(result.model, "selected/free-model-v2");
+    assert.deepEqual(result.usage, {
+      inputTokens: 11,
+      outputTokens: 9,
+      reasoningTokens: 3,
+      totalTokens: 20,
+    });
+    assert.equal(result.providerRequestId, "generation-safe-1");
+  });
+
+  await it("recognizes token exhaustion when empty content consumes the limit", async () => {
+    const server = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          choices: [{ message: { content: "" }, finish_reason: "stop" }],
+          usage: { completion_tokens: 100 },
+        }),
+      );
+    });
+    await assert.rejects(
+      new OpenRouterAiProvider().generate(providerRequest, {
+        endpoint: server.endpoint,
+        apiKey: "synthetic-test-key",
+      }),
+      (error: unknown) =>
+        error instanceof AiError && error.code === "provider-output-truncated",
     );
   });
 });

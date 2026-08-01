@@ -1,6 +1,8 @@
 import { redactSensitiveText } from "../diagnostics/redaction.ts";
 import { AiError, toSafeAiError } from "./ai-errors.ts";
+import type { AiProviderResponseMetadata } from "./ai-errors.ts";
 import type { AiProvider, AiProviderExecutionContext } from "./ai-provider.ts";
+import { validateAiProviderId } from "./ai-provider.ts";
 import type {
   AiGenerationRequest,
   AiGenerationResult,
@@ -22,7 +24,8 @@ interface OpenRouterResponseBody {
   readonly error?: unknown;
 }
 
-const MAXIMUM_RESPONSE_CHARACTERS = 1_000_000;
+const MAXIMUM_OUTPUT_CHARACTERS = 1_000_000;
+const MAXIMUM_RESPONSE_CHARACTERS = 1_100_000;
 
 function parseRetryAfter(value: string | null): number | undefined {
   if (value === null) {
@@ -40,11 +43,15 @@ function parseRetryAfter(value: string | null): number | undefined {
 }
 
 function errorFromStatus(status: number, retryAfter: string | null): AiError {
+  const responseMetadata = Object.freeze({
+    httpCategory: "failure" as const,
+  });
   if (status === 401 || status === 403) {
     return new AiError({
       code: "authentication-failed",
       message: "OpenRouter rejected the request credentials.",
       httpStatus: status,
+      responseMetadata,
     });
   }
   if (status === 400 || status === 404 || status === 422) {
@@ -52,6 +59,7 @@ function errorFromStatus(status: number, retryAfter: string | null): AiError {
       code: "request-invalid",
       message: `OpenRouter rejected the request with HTTP ${String(status)}.`,
       httpStatus: status,
+      responseMetadata,
     });
   }
   if (status === 429) {
@@ -62,6 +70,7 @@ function errorFromStatus(status: number, retryAfter: string | null): AiError {
       transient: true,
       httpStatus: status,
       ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+      responseMetadata,
     });
   }
   if (status >= 500) {
@@ -70,12 +79,14 @@ function errorFromStatus(status: number, retryAfter: string | null): AiError {
       message: `OpenRouter is unavailable with HTTP ${String(status)}.`,
       transient: true,
       httpStatus: status,
+      responseMetadata,
     });
   }
   return new AiError({
     code: "provider-failure",
     message: `OpenRouter request failed with HTTP ${String(status)}.`,
     httpStatus: status,
+    responseMetadata,
   });
 }
 
@@ -86,6 +97,18 @@ function parseUsage(value: unknown): AiTokenUsage | undefined {
   const usage = value as Record<string, unknown>;
   const inputTokens = usage.prompt_tokens;
   const outputTokens = usage.completion_tokens;
+  const directReasoningTokens = usage.reasoning_tokens;
+  const completionDetails = usage.completion_tokens_details;
+  const detailedReasoningTokens =
+    typeof completionDetails === "object" &&
+    completionDetails !== null &&
+    !Array.isArray(completionDetails)
+      ? (completionDetails as Record<string, unknown>).reasoning_tokens
+      : undefined;
+  const reasoningTokens =
+    typeof detailedReasoningTokens === "number"
+      ? detailedReasoningTokens
+      : directReasoningTokens;
   const totalTokens = usage.total_tokens;
   const result: AiTokenUsage = {
     ...(typeof inputTokens === "number" && Number.isFinite(inputTokens)
@@ -94,11 +117,98 @@ function parseUsage(value: unknown): AiTokenUsage | undefined {
     ...(typeof outputTokens === "number" && Number.isFinite(outputTokens)
       ? { outputTokens }
       : {}),
+    ...(typeof reasoningTokens === "number" && Number.isFinite(reasoningTokens)
+      ? { reasoningTokens }
+      : {}),
     ...(typeof totalTokens === "number" && Number.isFinite(totalTokens)
       ? { totalTokens }
       : {}),
   };
   return Object.keys(result).length === 0 ? undefined : Object.freeze(result);
+}
+
+function safeProviderRequestId(
+  bodyId: unknown,
+  headerRequestId: string | null,
+): string | undefined {
+  const candidate = typeof bodyId === "string" ? bodyId : headerRequestId;
+  return candidate !== null &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u.test(candidate)
+    ? redactSensitiveText(candidate, 200)
+    : undefined;
+}
+
+function contentKind(
+  message: Readonly<Record<string, unknown>>,
+): NonNullable<AiProviderResponseMetadata["contentKind"]> {
+  if (!Object.hasOwn(message, "content")) {
+    return "missing";
+  }
+  if (message.content === null) {
+    return "null";
+  }
+  if (typeof message.content === "string") {
+    return "string";
+  }
+  if (Array.isArray(message.content)) {
+    return "array";
+  }
+  return "unsupported";
+}
+
+function textFromContent(
+  content: unknown,
+  metadata: AiProviderResponseMetadata,
+): string {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (content === null || content === undefined) {
+    throw new AiError({
+      code: "provider-response-empty",
+      message: "OpenRouter returned no final message content.",
+      responseMetadata: metadata,
+    });
+  }
+  if (!Array.isArray(content)) {
+    throw new AiError({
+      code: "provider-response-malformed",
+      message: "OpenRouter returned an unsupported final content value.",
+      responseMetadata: metadata,
+    });
+  }
+  const textParts: string[] = [];
+  let characterCount = 0;
+  for (const part of content) {
+    if (typeof part !== "object" || part === null || Array.isArray(part)) {
+      throw new AiError({
+        code: "provider-response-malformed",
+        message: "OpenRouter returned an unsupported final content part.",
+        responseMetadata: metadata,
+      });
+    }
+    const record = part as Record<string, unknown>;
+    if (record.type !== "text" || typeof record.text !== "string") {
+      throw new AiError({
+        code: "provider-response-malformed",
+        message: "OpenRouter returned an unsupported final content part.",
+        responseMetadata: metadata,
+      });
+    }
+    characterCount += record.text.length;
+    if (characterCount > MAXIMUM_OUTPUT_CHARACTERS) {
+      throw new AiError({
+        code: "provider-output-oversized",
+        message: "OpenRouter final text exceeded the safe output limit.",
+        responseMetadata: Object.freeze({
+          ...metadata,
+          contentCharacterCount: characterCount,
+        }),
+      });
+    }
+    textParts.push(record.text);
+  }
+  return textParts.join("");
 }
 
 function parseResponse(
@@ -107,21 +217,65 @@ function parseResponse(
   durationMs: number,
   headerRequestId: string | null,
 ): AiGenerationResult {
-  if (!Array.isArray(body.choices) || body.choices.length === 0) {
+  const usage = parseUsage(body.usage);
+  const providerRequestId = safeProviderRequestId(body.id, headerRequestId);
+  const returnedModel =
+    typeof body.model === "string" && validateAiProviderId(body.model)
+      ? redactSensitiveText(body.model, 128)
+      : undefined;
+  const commonMetadata = Object.freeze({
+    httpCategory: "success" as const,
+    ...(returnedModel === undefined ? {} : { returnedModel }),
+    ...(usage?.outputTokens === undefined
+      ? {}
+      : { completionTokens: usage.outputTokens }),
+    ...(usage?.reasoningTokens === undefined
+      ? {}
+      : { reasoningTokens: usage.reasoningTokens }),
+    ...(providerRequestId === undefined ? {} : { providerRequestId }),
+  });
+  if (body.error !== undefined && body.error !== null) {
     throw new AiError({
-      code: "provider-response-invalid",
-      message: "OpenRouter response did not contain a completion choice.",
+      code: "provider-finish-error",
+      message: "OpenRouter reported a provider error in a successful response.",
+      responseMetadata: commonMetadata,
+    });
+  }
+  if (!Array.isArray(body.choices)) {
+    throw new AiError({
+      code: "provider-response-malformed",
+      message: "OpenRouter response did not contain a choices array.",
+      responseMetadata: commonMetadata,
+    });
+  }
+  if (body.choices.length === 0) {
+    throw new AiError({
+      code: "provider-response-malformed",
+      message: "OpenRouter response contained no completion choices.",
+      responseMetadata: Object.freeze({ ...commonMetadata, choicesCount: 0 }),
     });
   }
   const choices: readonly unknown[] = body.choices;
   const choice: unknown = choices[0];
   if (typeof choice !== "object" || choice === null || Array.isArray(choice)) {
     throw new AiError({
-      code: "provider-response-invalid",
+      code: "provider-response-malformed",
       message: "OpenRouter returned an invalid completion choice.",
+      responseMetadata: Object.freeze({
+        ...commonMetadata,
+        choicesCount: choices.length,
+      }),
     });
   }
   const record = choice as Record<string, unknown>;
+  const finishReason =
+    typeof record.finish_reason === "string"
+      ? redactSensitiveText(record.finish_reason, 100)
+      : "unknown";
+  const nativeFinishReason =
+    typeof record.native_finish_reason === "string"
+      ? redactSensitiveText(record.native_finish_reason, 100)
+      : undefined;
   const message = record.message;
   if (
     typeof message !== "object" ||
@@ -129,28 +283,76 @@ function parseResponse(
     Array.isArray(message)
   ) {
     throw new AiError({
-      code: "provider-response-invalid",
+      code: "provider-response-malformed",
       message: "OpenRouter response did not contain a completion message.",
+      responseMetadata: Object.freeze({
+        ...commonMetadata,
+        choicesCount: choices.length,
+        finishReason,
+        ...(nativeFinishReason === undefined ? {} : { nativeFinishReason }),
+        contentKind: "missing",
+      }),
     });
   }
-  const content = (message as Record<string, unknown>).content;
-  if (
-    typeof content !== "string" ||
-    content.length > MAXIMUM_RESPONSE_CHARACTERS
-  ) {
+  const messageRecord = message as Record<string, unknown>;
+  const kind = contentKind(messageRecord);
+  const reasoningPresent =
+    (typeof messageRecord.reasoning === "string" &&
+      messageRecord.reasoning.length > 0) ||
+    (Array.isArray(messageRecord.reasoning_details) &&
+      messageRecord.reasoning_details.length > 0);
+  const metadata: AiProviderResponseMetadata = Object.freeze({
+    ...commonMetadata,
+    choicesCount: choices.length,
+    finishReason,
+    ...(nativeFinishReason === undefined ? {} : { nativeFinishReason }),
+    contentKind: kind,
+    ...(typeof messageRecord.content === "string"
+      ? { contentCharacterCount: messageRecord.content.length }
+      : {}),
+    reasoningPresent,
+  });
+  if (finishReason === "length") {
     throw new AiError({
-      code: "provider-response-invalid",
-      message: "OpenRouter returned missing or oversized text output.",
+      code: "provider-output-truncated",
+      message:
+        "OpenRouter exhausted the bounded completion-token allowance; increase the verifier allowance within policy limits.",
+      responseMetadata: metadata,
     });
   }
-  const usage = parseUsage(body.usage);
-  const candidateRequestId =
-    typeof body.id === "string" ? body.id : (headerRequestId ?? undefined);
-  const providerRequestId =
-    candidateRequestId !== undefined &&
-    /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u.test(candidateRequestId)
-      ? redactSensitiveText(candidateRequestId, 200)
-      : undefined;
+  if (finishReason === "error") {
+    throw new AiError({
+      code: "provider-finish-error",
+      message: "OpenRouter reported an unsuccessful completion finish state.",
+      responseMetadata: metadata,
+    });
+  }
+  const content = textFromContent(messageRecord.content, metadata);
+  const completedMetadata = Object.freeze({
+    ...metadata,
+    contentCharacterCount: content.length,
+  });
+  if (content.length > MAXIMUM_OUTPUT_CHARACTERS) {
+    throw new AiError({
+      code: "provider-output-oversized",
+      message: "OpenRouter final text exceeded the safe output limit.",
+      responseMetadata: completedMetadata,
+    });
+  }
+  if (content.trim().length === 0) {
+    const tokenLimitReached =
+      usage?.outputTokens !== undefined &&
+      usage.outputTokens >= request.maxOutputTokens;
+    throw new AiError({
+      code: tokenLimitReached
+        ? "provider-output-truncated"
+        : "provider-response-empty",
+      message: tokenLimitReached
+        ? "OpenRouter exhausted the bounded completion-token allowance without final text; increase the verifier allowance within policy limits."
+        : "OpenRouter returned empty final message content.",
+      responseMetadata: completedMetadata,
+    });
+  }
   return Object.freeze({
     providerId: "openrouter",
     model:
@@ -159,10 +361,7 @@ function parseResponse(
         : request.model,
     text: content,
     ...(usage === undefined ? {} : { usage }),
-    finishReason:
-      typeof record.finish_reason === "string"
-        ? redactSensitiveText(record.finish_reason, 100)
-        : "unknown",
+    finishReason,
     durationMs,
     retryCount: 0,
     ...(providerRequestId === undefined ? {} : { providerRequestId }),
@@ -215,7 +414,8 @@ export class OpenRouterAiProvider implements AiProvider {
             ...request.messages,
           ],
           temperature: request.temperature,
-          max_tokens: request.maxOutputTokens,
+          max_completion_tokens: request.maxOutputTokens,
+          reasoning: { effort: "none", exclude: true },
           ...(request.responseFormat.type === "json_object"
             ? { response_format: { type: "json_object" } }
             : {}),
@@ -231,8 +431,9 @@ export class OpenRouterAiProvider implements AiProvider {
       const responseText = await response.text();
       if (responseText.length > MAXIMUM_RESPONSE_CHARACTERS) {
         throw new AiError({
-          code: "provider-response-invalid",
-          message: "OpenRouter returned an oversized response.",
+          code: "provider-output-oversized",
+          message: "OpenRouter response exceeded the safe response limit.",
+          responseMetadata: Object.freeze({ httpCategory: "success" }),
         });
       }
       let body: OpenRouterResponseBody;
@@ -240,8 +441,9 @@ export class OpenRouterAiProvider implements AiProvider {
         body = JSON.parse(responseText) as OpenRouterResponseBody;
       } catch {
         throw new AiError({
-          code: "provider-response-invalid",
+          code: "provider-response-malformed",
           message: "OpenRouter returned malformed JSON.",
+          responseMetadata: Object.freeze({ httpCategory: "success" }),
         });
       }
       return parseResponse(

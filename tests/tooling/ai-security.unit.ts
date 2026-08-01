@@ -52,6 +52,13 @@ await describe("AI foundation security invariants", async () => {
     assert.match(verification, /--confirm-network/u);
     assert.match(verification, /AEGIS_AI_ALLOW_NETWORK_CALLS/u);
     assert.match(verification, /maxEstimatedCostUsd: 0\.01/u);
+    assert.match(verification, /requestTimeoutMs: 15_000/u);
+    assert.match(verification, /maxRetries: 0/u);
+    assert.match(verification, /maxOutputTokens: 128/u);
+    assert.doesNotMatch(
+      verification,
+      /console\.(?:log|error)\([^\n]*(?:result\.text|structuredOutput|apiKey)/u,
+    );
     assert.doesNotMatch(
       rootPackage,
       /"ci:framework": "[^"]*openrouter:verify/u,
