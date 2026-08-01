@@ -66,6 +66,8 @@ jobs:
           npm run --silent doctor:browsers -- --browser=${{ matrix.browser }} --json | tee artifacts/browser-doctor/${{ matrix.browser }}.json
       - name: Run locator candidate browser integration
         run: npm run test:locator:browser -- --browser=${{ matrix.browser }}
+      - name: Run locator evaluation browser pack
+        run: npm run test:locator:evaluation:browser -- --browser=${{ matrix.browser }}
       - name: Upload browser-doctor result
         if: always()
         uses: actions/upload-artifact@v7

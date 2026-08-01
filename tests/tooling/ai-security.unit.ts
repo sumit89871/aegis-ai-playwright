@@ -67,6 +67,33 @@ await describe("AI foundation security invariants", async () => {
     );
   });
 
+  await it("keeps locator evaluation deterministic and offline in CI", () => {
+    const evaluator = read("scripts/ai-locator-evaluate.ts");
+    const openRouterEvaluator = read(
+      "scripts/ai-locator-evaluate-openrouter.ts",
+    );
+    const rootPackage = read("package.json");
+    const workflow = read(".github/workflows/framework-ci.yml");
+    const ignore = read(".gitignore");
+    assert.match(evaluator, /runLocatorEvaluationDataset/u);
+    assert.doesNotMatch(
+      evaluator,
+      /OpenRouterAiProvider|OPENROUTER_API_KEY|allowNetworkCalls:\s*true/u,
+    );
+    assert.match(openRouterEvaluator, /--confirm-network/u);
+    assert.match(openRouterEvaluator, /maxRetries:\s*0/u);
+    assert.match(openRouterEvaluator, /maxEstimatedCostUsd:\s*0\.01/u);
+    assert.doesNotMatch(
+      rootPackage,
+      /"ci:framework": "[^"]*evaluate:openrouter/u,
+    );
+    assert.doesNotMatch(
+      workflow,
+      /OPENROUTER_API_KEY|openrouter\.ai|secrets\./u,
+    );
+    assert.match(ignore, /\/artifacts\/locator-evaluation\//u);
+  });
+
   await it("attaches locator reports only after an unexpected failure", () => {
     const fixture = read("examples/nopcommerce/src/fixtures/test-fixtures.ts");
     const failureGuard = fixture.indexOf(
@@ -107,6 +134,9 @@ await describe("AI foundation security invariants", async () => {
       "packages/core/src/ai-analysis/failure-analysis-validator.ts",
       "packages/core/src/locator-diagnosis/locator-diagnosis-client.ts",
       "packages/core/src/locator-diagnosis/deterministic-locator-diagnosis.ts",
+      "packages/core/src/locator-evaluation/evaluation-runner.ts",
+      "packages/core/src/locator-evaluation/evaluation-metrics.ts",
+      "packages/core/src/locator-evaluation/evaluation-validator.ts",
     ];
     for (const file of files) {
       const source = read(file);

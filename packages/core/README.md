@@ -75,3 +75,5 @@ A future monetary utility may belong here only when it supports explicit locale 
 ## Advisory locator diagnosis
 
 The `locator-diagnosis` exports provide controlled Playwright error classification, conservative target-intent inference, bounded read-only candidate collection, uniqueness measurement, deterministic scoring, strict report validation, optional mock/provider ranking of known IDs, and safe JSON/Markdown rendering. Defaults are deterministic-only with AI disabled. These APIs do not retry actions, write source, or implement self-healing.
+
+The `locator-evaluation` exports validate 40 reviewed generic calibration/validation cases, remove expected answers before analysis, compute classification/recommendation/ranking/confidence/safety metrics, enforce strict thresholds, and render deterministic reports. They default to offline deterministic execution. Browser-backed evaluation remains a script-level runtime check so core unit tests require no browser.

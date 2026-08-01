@@ -209,3 +209,14 @@ npm run ai:locator:demo -- --json
 ```
 
 See [Advisory UI locator diagnosis](docs/ai-locator-diagnosis.md) for the evidence boundary, scoring policy, and limitations.
+
+The versioned locator evaluation harness measures classification, abstention, candidate ranking, confidence, and strict safety gates across 40 reviewed calibration/validation cases. It is deterministic and offline by default; generated reports remain ignored.
+
+```powershell
+npm run ai:locator:evaluate
+npm run ai:locator:evaluate -- --json
+npm run ai:locator:evaluate -- --dataset=validation
+npm run ai:locator:evaluate -- --mode=mock-ai
+```
+
+See [Locator-diagnosis evaluation](docs/locator-diagnosis-evaluation.md). A controlled benchmark does not prove production accuracy, and automatic healing remains absent.

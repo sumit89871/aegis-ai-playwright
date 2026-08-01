@@ -36,3 +36,14 @@ The demo uses the mock provider and synthetic candidates only. Review nopCommerc
 ## Current limitations
 
 Candidate collection sees only the current page state at teardown and may be unavailable after a crash or explicit page close. The accessible-name calculation is an approximation. Shadow-mode suggestions still require a person to confirm business intent and update the owning Page Object manually.
+
+## Repeatable evaluation
+
+The [locator-diagnosis evaluation harness](locator-diagnosis-evaluation.md) measures classification, no-change decisions, candidate ranks, confidence, and unsafe output against separate reviewed calibration and validation packs. Expected answers are never passed to the analyser. The default evaluation is deterministic and offline:
+
+```powershell
+npm run ai:locator:evaluate
+npm run ai:locator:evaluate -- --dataset=validation
+```
+
+Passing this controlled benchmark supports continued shadow-mode review; it does not establish production accuracy or authorize automatic healing.

@@ -349,6 +349,7 @@ export function classifyLocatorFailure(
     const noMatch = includesAny(lower, [
       "waiting for",
       "exceeded while waiting",
+      "while waiting",
     ]);
     if (noMatch) {
       return result(

@@ -86,3 +86,5 @@ The generic analyzer normalizes bounded diagnostic, readiness, accessibility, an
 
 Run the offline demonstration with `npm run ai:analyse:demo` or its JSON form with `npm run ai:analyse:demo -- --json`. See [Advisory UI failure analysis](ai-failure-analysis.md) for the evidence contract and Playwright attachment lifecycle.
 The locator-diagnosis consumer is a narrower advisory layer. Deterministic code classifies the failure and creates candidate IDs first. Optional AI can rank only those IDs. Its prompt and output are bounded and validated; normal tests and CI use no provider network. See [Advisory UI locator diagnosis](ai-locator-diagnosis.md).
+
+The [locator-diagnosis evaluation harness](locator-diagnosis-evaluation.md) is offline by default. It measures reviewed structured cases using deterministic or mock execution without a key. An optional real-provider mode is separately guarded and never part of CI.

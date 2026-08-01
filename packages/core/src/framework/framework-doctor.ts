@@ -55,6 +55,13 @@ export interface FrameworkDoctorInput {
   readonly locatorDiagnosisAiDisabledDefault: boolean;
   readonly locatorDiagnosisLimitsValid: boolean;
   readonly locatorDiagnosisMockAvailable: boolean;
+  readonly locatorEvaluationImportable: boolean;
+  readonly locatorEvaluationDatasetsValid: boolean;
+  readonly locatorEvaluationCaseIdsUnique: boolean;
+  readonly locatorEvaluationThresholdsValid: boolean;
+  readonly locatorEvaluationDeterministicDefault: boolean;
+  readonly locatorEvaluationNetworkDisabledDefault: boolean;
+  readonly locatorEvaluationArtifactsIgnored: boolean;
   readonly automaticHealingAbsent: boolean;
   readonly browserExecutablesRequired?: boolean;
 }
@@ -368,6 +375,48 @@ export function evaluateFrameworkDoctor(
       "Offline mock locator analysis is unavailable",
     ),
     check(
+      "locator-evaluation-import",
+      input.locatorEvaluationImportable,
+      "Locator-evaluation APIs import successfully",
+      "Locator-evaluation APIs are unavailable",
+    ),
+    check(
+      "locator-evaluation-datasets",
+      input.locatorEvaluationDatasetsValid,
+      "Reviewed locator-evaluation datasets are valid",
+      "One or more locator-evaluation datasets are invalid",
+    ),
+    check(
+      "locator-evaluation-case-ids",
+      input.locatorEvaluationCaseIdsUnique,
+      "Locator-evaluation case IDs are unique",
+      "Duplicate locator-evaluation case IDs were detected",
+    ),
+    check(
+      "locator-evaluation-thresholds",
+      input.locatorEvaluationThresholdsValid,
+      "Locator-evaluation thresholds are valid",
+      "Locator-evaluation thresholds are invalid",
+    ),
+    check(
+      "locator-evaluation-deterministic-default",
+      input.locatorEvaluationDeterministicDefault,
+      "Locator evaluation defaults to deterministic-only mode",
+      "Locator evaluation does not default to deterministic-only mode",
+    ),
+    check(
+      "locator-evaluation-network-default",
+      input.locatorEvaluationNetworkDisabledDefault,
+      "Locator evaluation requires no network by default",
+      "Locator evaluation may use a network provider by default",
+    ),
+    check(
+      "locator-evaluation-artifacts-ignored",
+      input.locatorEvaluationArtifactsIgnored,
+      "Generated locator-evaluation reports are ignored",
+      "Generated locator-evaluation reports are not ignored",
+    ),
+    check(
       "automatic-healing-absent",
       input.automaticHealingAbsent,
       "Automatic locator healing capability is absent",
@@ -414,6 +463,13 @@ const DOCTOR_CHECK_LABELS: Readonly<Record<string, string>> = Object.freeze({
   "locator-diagnosis-ai-default": "Locator AI disabled by default",
   "locator-diagnosis-limits": "Locator diagnosis limits",
   "locator-diagnosis-mock": "Offline locator mock",
+  "locator-evaluation-import": "Locator evaluation import",
+  "locator-evaluation-datasets": "Locator evaluation datasets",
+  "locator-evaluation-case-ids": "Locator evaluation case IDs",
+  "locator-evaluation-thresholds": "Locator evaluation thresholds",
+  "locator-evaluation-deterministic-default": "Locator evaluation default",
+  "locator-evaluation-network-default": "Locator evaluation network policy",
+  "locator-evaluation-artifacts-ignored": "Locator evaluation artifacts",
   "automatic-healing-absent": "Automatic healing absent",
 });
 

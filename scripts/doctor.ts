@@ -74,6 +74,12 @@ async function collectDoctorInput(
   let locatorDiagnosisAiDisabledDefault = false;
   let locatorDiagnosisLimitsValid = false;
   let locatorDiagnosisMockAvailable = false;
+  let locatorEvaluationImportable = false;
+  let locatorEvaluationDatasetsValid = false;
+  let locatorEvaluationCaseIdsUnique = false;
+  let locatorEvaluationThresholdsValid = false;
+  let locatorEvaluationDeterministicDefault = false;
+  let locatorEvaluationNetworkDisabledDefault = false;
   let automaticHealingAbsent = false;
   try {
     import.meta.resolve("@aegis/core");
@@ -103,6 +109,18 @@ async function collectDoctorInput(
     const defaultLocatorDiagnosisConfiguration =
       core.defaultLocatorDiagnosisConfiguration as
         (() => Readonly<Record<string, unknown>>) | undefined;
+    const validateLocatorEvaluationDataset =
+      core.validateLocatorEvaluationDataset as
+        | ((value: unknown) => {
+            readonly cases: readonly { readonly caseId: string }[];
+          })
+        | undefined;
+    const validateLocatorEvaluationThresholds =
+      core.validateLocatorEvaluationThresholds as
+        ((value: unknown) => unknown) | undefined;
+    const evaluationDatasets = core.LOCATOR_EVALUATION_DATASETS as
+      readonly unknown[] | undefined;
+    const evaluationThresholds = core.LOCATOR_EVALUATION_BASELINE;
     aiConfigurationImportable = [
       "createAiClient",
       "defaultAiConfiguration",
@@ -123,6 +141,37 @@ async function collectDoctorInput(
       "diagnoseLocatorDeterministically",
       "renderLocatorDiagnosisMarkdown",
     ].every((name) => coreExports.includes(name));
+    locatorEvaluationImportable = [
+      "runLocatorEvaluationDataset",
+      "calculateLocatorEvaluationMetrics",
+      "validateLocatorEvaluationDataset",
+      "validateLocatorEvaluationThresholds",
+      "renderLocatorEvaluationMarkdown",
+    ].every((name) => coreExports.includes(name));
+    if (
+      validateLocatorEvaluationDataset !== undefined &&
+      validateLocatorEvaluationThresholds !== undefined &&
+      evaluationDatasets !== undefined
+    ) {
+      try {
+        const validated = evaluationDatasets.map((dataset) =>
+          validateLocatorEvaluationDataset(dataset),
+        );
+        locatorEvaluationDatasetsValid = validated.length === 2;
+        const ids = validated.flatMap(({ cases }) =>
+          cases.map(({ caseId }) => caseId),
+        );
+        locatorEvaluationCaseIdsUnique = new Set(ids).size === ids.length;
+        validateLocatorEvaluationThresholds(evaluationThresholds);
+        locatorEvaluationThresholdsValid = true;
+      } catch {
+        locatorEvaluationDatasetsValid = false;
+      }
+    }
+    locatorEvaluationDeterministicDefault =
+      core.DEFAULT_LOCATOR_EVALUATION_MODE === "deterministic-only";
+    locatorEvaluationNetworkDisabledDefault =
+      locatorEvaluationDeterministicDefault;
     if (defaultLocatorDiagnosisConfiguration !== undefined) {
       const defaults = defaultLocatorDiagnosisConfiguration();
       locatorDiagnosisDeterministicDefault =
@@ -264,6 +313,16 @@ async function collectDoctorInput(
     locatorDiagnosisAiDisabledDefault,
     locatorDiagnosisLimitsValid,
     locatorDiagnosisMockAvailable,
+    locatorEvaluationImportable,
+    locatorEvaluationDatasetsValid,
+    locatorEvaluationCaseIdsUnique,
+    locatorEvaluationThresholdsValid,
+    locatorEvaluationDeterministicDefault,
+    locatorEvaluationNetworkDisabledDefault,
+    locatorEvaluationArtifactsIgnored: readFileSync(
+      new URL(".gitignore", repositoryRoot),
+      "utf8",
+    ).includes("/artifacts/locator-evaluation/"),
     automaticHealingAbsent,
     browserExecutablesRequired,
   };

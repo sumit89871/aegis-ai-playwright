@@ -114,6 +114,25 @@ export function diagnoseLocatorDeterministically(
       missingEvidence: Object.freeze(["safe matching candidates"]),
       limitations: Object.freeze(["No candidate is known to be correct."]),
     });
+  const [firstCandidate, secondCandidate] = inventory.candidates;
+  if (
+    secondCandidate !== undefined &&
+    firstCandidate?.deterministicScore === secondCandidate.deterministicScore
+  )
+    return Object.freeze({
+      ...base,
+      confidence: "low",
+      recommendationStatus: "insufficient-evidence",
+      summary:
+        "The strongest locator candidates are equally ranked, so no replacement can be preferred safely.",
+      rankedCandidates: suggestions,
+      recommendedNextStep:
+        "Add business intent or a meaningful scope before selecting a replacement locator.",
+      missingEvidence: Object.freeze(["disambiguating target intent"]),
+      limitations: Object.freeze([
+        "Equal deterministic scores do not establish which element is correct.",
+      ]),
+    });
   return Object.freeze({
     ...base,
     confidence: suggestions[0]?.confidence ?? "low",

@@ -44,6 +44,13 @@ function validInput(
     locatorDiagnosisAiDisabledDefault: true,
     locatorDiagnosisLimitsValid: true,
     locatorDiagnosisMockAvailable: true,
+    locatorEvaluationImportable: true,
+    locatorEvaluationDatasetsValid: true,
+    locatorEvaluationCaseIdsUnique: true,
+    locatorEvaluationThresholdsValid: true,
+    locatorEvaluationDeterministicDefault: true,
+    locatorEvaluationNetworkDisabledDefault: true,
+    locatorEvaluationArtifactsIgnored: true,
     automaticHealingAbsent: true,
     ...overrides,
   };
@@ -110,7 +117,7 @@ await describe("framework doctor", async () => {
         browserExecutablesRequired: false,
       }),
     );
-    assert.deepEqual(result.summary, { passed: 26, warned: 3, failed: 0 });
+    assert.deepEqual(result.summary, { passed: 33, warned: 3, failed: 0 });
     assert.equal(doctorExitCode(result), 0);
   });
 
@@ -125,14 +132,26 @@ await describe("framework doctor", async () => {
 
   await it("calculates summary counts and exit status", () => {
     const passing = evaluateFrameworkDoctor(validInput());
-    assert.deepEqual(passing.summary, { passed: 29, warned: 0, failed: 0 });
+    assert.deepEqual(passing.summary, { passed: 36, warned: 0, failed: 0 });
     assert.equal(doctorExitCode(passing), 0);
 
     const failing = evaluateFrameworkDoctor(
       validInput({ packageLockExists: false }),
     );
-    assert.deepEqual(failing.summary, { passed: 28, warned: 0, failed: 1 });
+    assert.deepEqual(failing.summary, { passed: 35, warned: 0, failed: 1 });
     assert.equal(doctorExitCode(failing), 1);
+  });
+
+  await it("fails when a locator-evaluation safety invariant is unavailable", () => {
+    const result = evaluateFrameworkDoctor(
+      validInput({ locatorEvaluationThresholdsValid: false }),
+    );
+    assert.equal(
+      result.checks.find(({ id }) => id === "locator-evaluation-thresholds")
+        ?.status,
+      "fail",
+    );
+    assert.equal(doctorExitCode(result), 1);
   });
 
   await it("returns JSON-serializable plain data", () => {

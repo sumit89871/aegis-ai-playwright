@@ -36,6 +36,7 @@ await describe("locator failure classification", async () => {
       "Timeout 10000ms exceeded while waiting for getByRole('button')",
       "selector-no-match",
     ],
+    ["click locator failed with timeout while waiting", "selector-no-match"],
     ["Accessibility color-contrast violation", "not-a-locator-failure"],
     ["Expected value 2 but received: 3", "not-a-locator-failure"],
     [

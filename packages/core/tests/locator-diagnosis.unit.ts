@@ -120,6 +120,64 @@ await describe("deterministic locator diagnosis", async () => {
     });
   }
 
+  await it("abstains when the strongest candidates have equal scores", () => {
+    const classification = classifyLocatorFailure(
+      "click locator('.old') resolved to no elements",
+    );
+    const intent = classification.intent;
+    const candidates = rankLocatorCandidates(
+      [
+        {
+          strategy: "role",
+          role: "button",
+          name: "Approve",
+          exact: true,
+          scopeHint: null,
+          tagName: "button",
+          matchCount: 1,
+          visible: true,
+          enabled: true,
+          editable: false,
+          hasBoundingBox: true,
+        },
+        {
+          strategy: "role",
+          role: "button",
+          name: "Reject",
+          exact: true,
+          scopeHint: null,
+          tagName: "button",
+          matchCount: 1,
+          visible: true,
+          enabled: true,
+          editable: false,
+          hasBoundingBox: true,
+        },
+      ],
+      intent,
+    ).candidates;
+    const ambiguousInventory: LocatorCandidateInventory = {
+      status: "collected",
+      candidates,
+      droppedCandidateCount: 0,
+      scannedElementCount: 2,
+      intent,
+    };
+    const result = diagnoseLocatorDeterministically(
+      normalizeLocatorEvidence(
+        {
+          errorMessage: "click locator('.old') resolved to no elements",
+          pageAvailable: true,
+        },
+        classification,
+        ambiguousInventory,
+      ),
+      ambiguousInventory,
+    );
+    assert.equal(result.recommendationStatus, "insufficient-evidence");
+    assert.equal(result.confidence, "low");
+  });
+
   await it("reports unavailable collection", () => {
     assert.equal(
       deterministic("locator('.old') resolved to no elements", "unavailable")
