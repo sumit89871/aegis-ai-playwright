@@ -13,7 +13,7 @@ import {
 } from "../locator-evaluation/evaluation-runner.ts";
 import type { LocatorObservation } from "./locator-observation.ts";
 import type { LocatorObservationReview } from "./locator-observation-review.ts";
-import { validateLocatorObservationReview } from "./locator-observation-review.ts";
+import { validateLocatorObservationReview } from "./locator-observation-review-validation.ts";
 import { validateLocatorObservation } from "./locator-observation-validator.ts";
 
 export const MINIMUM_MEANINGFUL_HOLDOUT_SAMPLE_SIZE = 30;

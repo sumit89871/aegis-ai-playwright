@@ -8,6 +8,7 @@ import {
   deduplicateLocatorObservations,
   diagnoseLocatorFailure,
   importLocatorDiagnosisObservation,
+  inspectLocatorObservationReview,
   mapRuntimeLocatorCandidateToObservationCandidate,
   rankLocatorCandidates,
   renderLocatorHoldoutMarkdown,
@@ -427,6 +428,15 @@ await describe("locator shadow observation validation", async () => {
 });
 
 await describe("locator observation human review", async () => {
+  function codes(
+    value: unknown,
+    linked: LocatorObservation,
+  ): readonly string[] {
+    return inspectLocatorObservationReview(value, linked).issues.map(
+      ({ code }) => code,
+    );
+  }
+
   await it("creates an empty pending review template", async () => {
     const template = createLocatorObservationReviewTemplate(
       await observation(),
@@ -455,6 +465,420 @@ await describe("locator observation human review", async () => {
     );
   });
 
+  await it("allows rejected and needs-more-evidence reviews", async () => {
+    const value = await observation();
+    for (const reviewStatus of ["rejected", "needs-more-evidence"] as const) {
+      const result = inspectLocatorObservationReview(
+        {
+          ...createLocatorObservationReviewTemplate(value),
+          reviewStatus,
+        },
+        value,
+      );
+      assert.equal(result.valid, true);
+      assert.equal(result.review?.reviewStatus, reviewStatus);
+    }
+  });
+
+  await it("reports every missing required field", async () => {
+    const value = await observation();
+    const result = inspectLocatorObservationReview({}, value);
+    assert.equal(result.valid, false);
+    assert.equal(
+      result.issues.filter(
+        ({ code }) => code === "REVIEW_REQUIRED_FIELD_MISSING",
+      ).length,
+      11,
+    );
+  });
+
+  await it("reports every unknown field without making the schema permissive", async () => {
+    const value = await observation();
+    const result = inspectLocatorObservationReview(
+      {
+        ...createLocatorObservationReviewTemplate(value),
+        unexpectedProperty: true,
+      },
+      value,
+    );
+    assert.deepEqual(
+      result.issues.map(({ code }) => code),
+      ["REVIEW_UNKNOWN_FIELD"],
+    );
+    assert.equal(result.issues[0]?.fieldPath, "$.unexpectedProperty");
+  });
+
+  await it("reports wrong and malformed observation IDs safely", async () => {
+    const value = await observation();
+    const wrongType = inspectLocatorObservationReview(
+      { ...createLocatorObservationReviewTemplate(value), observationId: 42 },
+      value,
+    );
+    const malformed = inspectLocatorObservationReview(
+      {
+        ...createLocatorObservationReviewTemplate(value),
+        observationId: "not-an-observation-id",
+      },
+      value,
+    );
+    assert.ok(
+      wrongType.issues.some(({ code }) => code === "REVIEW_FIELD_TYPE_INVALID"),
+    );
+    assert.ok(
+      malformed.issues.some(
+        ({ code }) => code === "REVIEW_OBSERVATION_ID_INVALID",
+      ),
+    );
+    assert.doesNotMatch(JSON.stringify(malformed), /not-an-observation-id/u);
+  });
+
+  await it("reports an unsupported review status and exact allowed values", async () => {
+    const value = await observation();
+    const result = inspectLocatorObservationReview(
+      {
+        ...createLocatorObservationReviewTemplate(value),
+        reviewStatus: "approved",
+      },
+      value,
+    );
+    const found = result.issues.find(
+      ({ code }) => code === "REVIEW_STATUS_UNSUPPORTED",
+    );
+    assert.deepEqual(found?.allowedValues, [
+      "pending",
+      "reviewed",
+      "rejected",
+      "needs-more-evidence",
+    ]);
+  });
+
+  await it("reports unsupported classification, recommendation, and confidence values", async () => {
+    const value = await observation();
+    const result = inspectLocatorObservationReview(
+      {
+        ...reviewed(value),
+        expectedClassification: "made-up",
+        expectedRecommendationStatus: "replace-now",
+        minimumAcceptableConfidence: "certain",
+      },
+      value,
+    );
+    assert.deepEqual(
+      result.issues.map(({ code }) => code),
+      [
+        "REVIEW_CLASSIFICATION_UNSUPPORTED",
+        "REVIEW_RECOMMENDATION_STATUS_UNSUPPORTED",
+        "REVIEW_CONFIDENCE_UNSUPPORTED",
+      ],
+    );
+  });
+
+  await it("reports reviewed null expected answers with actionable codes", async () => {
+    const value = await observation();
+    const result = inspectLocatorObservationReview(
+      {
+        ...reviewed(value),
+        expectedClassification: null,
+        expectedRecommendationStatus: null,
+        minimumAcceptableConfidence: null,
+      },
+      value,
+    );
+    assert.deepEqual(
+      result.issues.map(({ code }) => code),
+      [
+        "REVIEWED_CLASSIFICATION_REQUIRED",
+        "REVIEWED_RECOMMENDATION_STATUS_REQUIRED",
+        "REVIEWED_CONFIDENCE_REQUIRED",
+      ],
+    );
+    const classification = result.issues[0];
+    assert.ok(classification !== undefined);
+    assert.equal(classification.fieldPath, "$.expectedClassification");
+    assert.equal(classification.actualValue, null);
+    assert.ok((classification.allowedValues?.length ?? 0) > 10);
+    assert.match(classification.suggestion, /human-reviewed/u);
+  });
+
+  await it("distinguishes empty and whitespace-only reviewed rationales", async () => {
+    const value = await observation();
+    for (const [rationale, actual] of [
+      ["", "<empty>"],
+      ["   ", "<whitespace-only>"],
+    ] as const) {
+      const result = inspectLocatorObservationReview(
+        reviewed(value, { reviewerRationale: rationale }),
+        value,
+      );
+      const found = result.issues.find(
+        ({ code }) => code === "REVIEW_RATIONALE_EMPTY",
+      );
+      assert.equal(found?.actualValue, actual);
+      assert.doesNotMatch(JSON.stringify(found), /unique semantic button/u);
+    }
+  });
+
+  await it("reports short and oversized reviewed rationales without printing them", async () => {
+    const value = await observation();
+    const short = inspectLocatorObservationReview(
+      reviewed(value, { reviewerRationale: "short" }),
+      value,
+    );
+    const long = inspectLocatorObservationReview(
+      reviewed(value, { reviewerRationale: "x".repeat(1_001) }),
+      value,
+    );
+    assert.ok(
+      codes(reviewed(value, { reviewerRationale: "short" }), value).includes(
+        "REVIEW_RATIONALE_TOO_SHORT",
+      ),
+    );
+    assert.ok(
+      long.issues.some(({ code }) => code === "REVIEW_RATIONALE_TOO_LONG"),
+    );
+    assert.doesNotMatch(JSON.stringify(short), /The unique semantic/u);
+    assert.doesNotMatch(JSON.stringify(long), /x{20}/u);
+  });
+
+  await it("reports duplicate IDs in every candidate array", async () => {
+    const value = await observation();
+    const result = inspectLocatorObservationReview(
+      reviewed(value, {
+        candidateIds: ["LOCATOR-001", "LOCATOR-001", "LOCATOR-002"],
+        acceptableCandidateIds: ["LOCATOR-001", "LOCATOR-001"],
+        preferredCandidateIds: ["LOCATOR-001", "LOCATOR-001"],
+        forbiddenCandidateIds: ["LOCATOR-002", "LOCATOR-002"],
+      }),
+      value,
+    );
+    assert.equal(
+      result.issues.filter(({ code }) => code === "REVIEW_CANDIDATE_DUPLICATE")
+        .length,
+      4,
+    );
+  });
+
+  await it("reports malformed candidate IDs and candidate-array types", async () => {
+    const value = await observation();
+    const malformed = inspectLocatorObservationReview(
+      {
+        ...reviewed(value),
+        acceptableCandidateIds: ["candidate-one"],
+      },
+      value,
+    );
+    const wrongType = inspectLocatorObservationReview(
+      { ...reviewed(value), forbiddenCandidateIds: "LOCATOR-002" },
+      value,
+    );
+    assert.ok(
+      malformed.issues.some(
+        ({ code }) => code === "REVIEW_CANDIDATE_ID_INVALID",
+      ),
+    );
+    assert.ok(
+      wrongType.issues.some(
+        ({ code, fieldPath }) =>
+          code === "REVIEW_FIELD_TYPE_INVALID" &&
+          fieldPath === "$.forbiddenCandidateIds",
+      ),
+    );
+  });
+
+  await it("reports wrong types for nullable enum fields and review notes", async () => {
+    const value = await observation();
+    const result = inspectLocatorObservationReview(
+      {
+        ...reviewed(value),
+        expectedClassification: 1,
+        expectedRecommendationStatus: [],
+        minimumAcceptableConfidence: true,
+        reviewNotes: { private: true },
+      },
+      value,
+    );
+    assert.equal(
+      result.issues.filter(({ code }) => code === "REVIEW_FIELD_TYPE_INVALID")
+        .length,
+      4,
+    );
+  });
+
+  await it("reports unknown candidates in acceptable, preferred, and forbidden arrays", async () => {
+    const value = await observation();
+    for (const field of [
+      "acceptableCandidateIds",
+      "preferredCandidateIds",
+      "forbiddenCandidateIds",
+    ] as const) {
+      const result = inspectLocatorObservationReview(
+        reviewed(value, { [field]: ["LOCATOR-999"] }),
+        value,
+      );
+      assert.ok(
+        result.issues.some(
+          ({ code, fieldPath }) =>
+            code === "REVIEW_CANDIDATE_UNKNOWN" &&
+            fieldPath.startsWith(`$.${field}`),
+        ),
+      );
+    }
+  });
+
+  await it("reports preferred candidates that are not acceptable", async () => {
+    const value = await observation();
+    const result = inspectLocatorObservationReview(
+      reviewed(value, {
+        acceptableCandidateIds: ["LOCATOR-002"],
+        preferredCandidateIds: ["LOCATOR-001"],
+        forbiddenCandidateIds: [],
+      }),
+      value,
+    );
+    const found = result.issues.find(
+      ({ code }) => code === "REVIEW_PREFERRED_NOT_ACCEPTABLE",
+    );
+    assert.ok(found !== undefined);
+    assert.equal(found.actualValue, "LOCATOR-001");
+    assert.match(found.suggestion, /acceptableCandidateIds/u);
+  });
+
+  await it("reports acceptable-forbidden and preferred-forbidden overlaps", async () => {
+    const value = await observation();
+    const result = inspectLocatorObservationReview(
+      reviewed(value, {
+        forbiddenCandidateIds: ["LOCATOR-001"],
+      }),
+      value,
+    );
+    assert.ok(
+      result.issues.some(
+        ({ code }) => code === "REVIEW_ACCEPTABLE_FORBIDDEN_OVERLAP",
+      ),
+    );
+    assert.ok(
+      result.issues.some(
+        ({ code }) => code === "REVIEW_PREFERRED_FORBIDDEN_OVERLAP",
+      ),
+    );
+  });
+
+  await it("requires an acceptable candidate for reviewed candidates-available verdicts", async () => {
+    const value = await observation();
+    assert.ok(
+      codes(
+        reviewed(value, {
+          acceptableCandidateIds: [],
+          preferredCandidateIds: [],
+        }),
+        value,
+      ).includes("REVIEWED_ACCEPTABLE_CANDIDATE_REQUIRED"),
+    );
+  });
+
+  await it("reports candidate inventory drift against the linked observation", async () => {
+    const value = await observation();
+    const result = inspectLocatorObservationReview(
+      reviewed(value, { candidateIds: ["LOCATOR-001", "LOCATOR-999"] }),
+      value,
+    );
+    assert.ok(
+      result.issues.some(({ code }) => code === "REVIEW_CANDIDATE_UNKNOWN"),
+    );
+    assert.ok(
+      result.issues.some(
+        ({ code }) => code === "REVIEW_CANDIDATE_SET_MISMATCH",
+      ),
+    );
+  });
+
+  await it("reports observation ID mismatch and unsupported review version", async () => {
+    const value = await observation();
+    const result = inspectLocatorObservationReview(
+      {
+        ...reviewed(value),
+        observationId: "LOC-OBS-AAAAAAAAAAAAAAAA",
+        reviewVersion: "2.0.0",
+      },
+      value,
+    );
+    assert.ok(
+      result.issues.some(
+        ({ code }) => code === "REVIEW_OBSERVATION_ID_MISMATCH",
+      ),
+    );
+    assert.ok(
+      result.issues.some(({ code }) => code === "REVIEW_VERSION_UNSUPPORTED"),
+    );
+  });
+
+  await it("aggregates independently detectable issues in deterministic order", async () => {
+    const value = await observation();
+    const invalid = {
+      ...reviewed(value),
+      reviewStatus: "approved",
+      expectedClassification: "invalid-classification",
+      acceptableCandidateIds: ["LOCATOR-002"],
+      preferredCandidateIds: ["LOCATOR-001"],
+      forbiddenCandidateIds: ["LOCATOR-002"],
+      reviewerRationale: "",
+      unexpectedProperty: true,
+    };
+    const first = inspectLocatorObservationReview(invalid, value);
+    const second = inspectLocatorObservationReview(invalid, value);
+    assert.ok(first.issues.length >= 4);
+    assert.deepEqual(first.issues, second.issues);
+    assert.deepEqual(
+      first.issues.map(({ fieldPath, code }) => `${fieldPath}:${code}`),
+      [...first.issues]
+        .sort(
+          (left, right) =>
+            left.fieldPath.localeCompare(right.fieldPath) ||
+            left.code.localeCompare(right.code),
+        )
+        .map(({ fieldPath, code }) => `${fieldPath}:${code}`),
+    );
+  });
+
+  await it("avoids membership cascades when candidateIds is not an array", async () => {
+    const value = await observation();
+    const result = inspectLocatorObservationReview(
+      { ...reviewed(value), candidateIds: "LOCATOR-001" },
+      value,
+    );
+    assert.equal(
+      result.issues.filter(({ code }) => code === "REVIEW_FIELD_TYPE_INVALID")
+        .length,
+      1,
+    );
+    assert.equal(
+      result.issues.filter(({ code }) => code === "REVIEW_CANDIDATE_UNKNOWN")
+        .length,
+      0,
+    );
+  });
+
+  await it("does not mutate review input and returns serializable results", async () => {
+    const value = await observation();
+    const input = reviewed(value);
+    const before = structuredClone(input);
+    const result = inspectLocatorObservationReview(input, value);
+    assert.deepEqual(input, before);
+    assert.deepEqual(JSON.parse(JSON.stringify(result)), result);
+  });
+
+  await it("never exposes full unsafe review text in diagnostics", async () => {
+    const value = await observation();
+    const secret = "password=do-not-print C:\\Users\\Alice\\review.txt <input>";
+    const result = inspectLocatorObservationReview(
+      reviewed(value, { reviewerRationale: secret }),
+      value,
+    );
+    const serialized = JSON.stringify(result);
+    assert.match(serialized, /REVIEW_TEXT_UNSAFE/u);
+    assert.doesNotMatch(serialized, /do-not-print|Alice|<input>/u);
+  });
+
   await it("requires rationale for reviewed observations", async () => {
     const value = await observation();
     assert.throws(
@@ -475,7 +899,7 @@ await describe("locator observation human review", async () => {
           reviewed(value, { acceptableCandidateIds: ["LOCATOR-999"] }),
           value,
         ),
-      /does not exist/u,
+      /REVIEW_CANDIDATE_UNKNOWN/u,
     );
   });
 
@@ -484,10 +908,13 @@ await describe("locator observation human review", async () => {
     assert.throws(
       () =>
         validateLocatorObservationReview(
-          reviewed(value, { acceptableCandidateIds: ["LOCATOR-002"] }),
+          reviewed(value, {
+            acceptableCandidateIds: ["LOCATOR-002"],
+            forbiddenCandidateIds: [],
+          }),
           value,
         ),
-      /preferred/u,
+      /REVIEW_PREFERRED_NOT_ACCEPTABLE/u,
     );
   });
 
@@ -499,7 +926,7 @@ await describe("locator observation human review", async () => {
           reviewed(value, { forbiddenCandidateIds: ["LOCATOR-001"] }),
           value,
         ),
-      /acceptable and forbidden/u,
+      /REVIEW_ACCEPTABLE_FORBIDDEN_OVERLAP/u,
     );
   });
 
@@ -511,7 +938,7 @@ await describe("locator observation human review", async () => {
     };
     assert.throws(
       () => validateLocatorObservationReview(unsafe, value),
-      /unsupported/u,
+      /REVIEW_UNKNOWN_FIELD/u,
     );
   });
 });

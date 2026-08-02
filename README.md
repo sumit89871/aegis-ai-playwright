@@ -227,8 +227,9 @@ Shadow observations add a privacy-safe path from real Playwright locator-diagnos
 npm run ai:locator:observations:collect -- --input=<relative-test-results-path>
 npm run ai:locator:observations:prepare-review
 npm run ai:locator:observations:validate-reviews
+npm run ai:locator:observations:validate-reviews -- --json
 npm run ai:locator:holdout:evaluate
 npm run ai:locator:holdout:evaluate -- --json
 ```
 
-See [Locator shadow observations](docs/locator-shadow-observations.md). Synthetic fixtures validate the workflow but are not production evidence; no accuracy claim is meaningful until enough independent observations have been reviewed. Locator replay and self-healing remain absent.
+Review validation reports every safely detectable field and relationship problem with a stable code, JSON field path, allowed values, and a suggested human repair. It never edits a review. See [Locator shadow observations](docs/locator-shadow-observations.md). Synthetic fixtures validate the workflow but are not production evidence; no accuracy claim is meaningful until enough independent observations have been reviewed. Locator replay and self-healing remain absent.

@@ -1,58 +1,56 @@
-import { readdir, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  validateLocatorObservation,
-  validateLocatorObservationReview,
-} from "@aegis/core";
-import type { LocatorObservation, LocatorObservationReview } from "@aegis/core";
+  locatorReviewValidationExitCode,
+  renderLocatorReviewValidationHuman,
+  renderLocatorReviewValidationJson,
+  validateLocatorObservationReviewDirectories,
+} from "./locator-observation-review-validation.ts";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("../", import.meta.url)));
-const pending = resolve(
-  repositoryRoot,
-  "artifacts/locator-observations/pending",
-);
-const reviews = resolve(
-  repositoryRoot,
-  "artifacts/locator-observations/review",
-);
-const observationFiles = (await readdir(pending).catch(() => [] as string[]))
-  .filter((name) => name.endsWith(".json"))
-  .sort();
-const byId = new Map<string, LocatorObservation>();
-for (const name of observationFiles) {
-  const observation = validateLocatorObservation(
-    JSON.parse(
-      await readFile(resolve(pending, name), "utf8"),
-    ) as LocatorObservation,
+const arguments_ = process.argv.slice(2);
+const json = arguments_.includes("--json");
+const valueFor = (prefix: string): string | undefined =>
+  arguments_
+    .find((entry) => entry.startsWith(`${prefix}=`))
+    ?.slice(prefix.length + 1);
+if (
+  arguments_.some(
+    (entry) =>
+      entry !== "--json" &&
+      !entry.startsWith("--observations=") &&
+      !entry.startsWith("--reviews="),
+  )
+)
+  throw new Error(
+    "Supported options are --json, --observations=<relative-path>, and --reviews=<relative-path>.",
   );
-  byId.set(observation.observationId, observation);
+
+function resolveRepositoryPath(value: string, label: string): string {
+  if (isAbsolute(value))
+    throw new Error(`${label} must be a repository-relative path.`);
+  const path = resolve(repositoryRoot, value);
+  const fromRoot = relative(repositoryRoot, path);
+  if (!fromRoot || fromRoot.startsWith("..") || isAbsolute(fromRoot))
+    throw new Error(`${label} must remain inside the repository.`);
+  return path;
 }
-const reviewFiles = (await readdir(reviews).catch(() => [] as string[]))
-  .filter((name) => name.endsWith(".review.json"))
-  .sort();
-const counts = { reviewed: 0, pending: 0, rejected: 0, needsMoreEvidence: 0 };
-const errors: string[] = [];
-for (const name of reviewFiles) {
-  try {
-    const review = JSON.parse(
-      await readFile(resolve(reviews, name), "utf8"),
-    ) as LocatorObservationReview;
-    const observation = byId.get(review.observationId);
-    if (observation === undefined)
-      throw new Error("Review has no matching observation.");
-    const valid = validateLocatorObservationReview(review, observation);
-    if (valid.reviewStatus === "needs-more-evidence")
-      counts.needsMoreEvidence += 1;
-    else counts[valid.reviewStatus] += 1;
-  } catch (error) {
-    errors.push(
-      `${name}: ${error instanceof Error ? error.message.slice(0, 250) : "invalid review"}`,
-    );
-  }
-}
-console.log(
-  `Observation reviews: ${errors.length === 0 ? "PASS" : "FAIL"} | reviewed ${String(counts.reviewed)} | pending ${String(counts.pending)} | rejected ${String(counts.rejected)} | needs more evidence ${String(counts.needsMoreEvidence)} | invalid ${String(errors.length)}`,
+
+const result = await validateLocatorObservationReviewDirectories({
+  repositoryRoot,
+  observationsDirectory: resolveRepositoryPath(
+    valueFor("--observations") ?? "artifacts/locator-observations/pending",
+    "Observation directory",
+  ),
+  reviewsDirectory: resolveRepositoryPath(
+    valueFor("--reviews") ?? "artifacts/locator-observations/review",
+    "Review directory",
+  ),
+});
+process.stdout.write(
+  json
+    ? renderLocatorReviewValidationJson(result)
+    : renderLocatorReviewValidationHuman(result),
 );
-process.exitCode = errors.length === 0 ? 0 : 1;
+process.exitCode = locatorReviewValidationExitCode(result);

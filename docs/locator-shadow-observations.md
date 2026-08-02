@@ -16,6 +16,7 @@ From the repository root:
 npm run ai:locator:observations:collect -- --input=examples/my-app/test-results --application=app-001
 npm run ai:locator:observations:prepare-review
 npm run ai:locator:observations:validate-reviews
+npm run ai:locator:observations:validate-reviews -- --json
 npm run ai:locator:holdout:evaluate
 npm run ai:locator:holdout:evaluate -- --json
 ```
@@ -29,6 +30,35 @@ The steps are deliberately separate:
 5. Validate reviews, then run the blind evaluator. Reports are written under `artifacts/locator-observations/reports`.
 
 Use `--id=LOC-OBS-...` with `prepare-review` to prepare one observation. Completed review files are never overwritten. `rejected`, `pending`, and `needs-more-evidence` records do not enter scored holdout metrics.
+
+## Actionable review validation
+
+Human-readable validation prints the repository-relative review path, observation ID, and every independently detectable issue before the aggregate summary. Each issue contains:
+
+- a stable code for users, tests, and future tooling;
+- a category and JSON-style field path;
+- a concise problem description;
+- a bounded safe current value when useful;
+- controlled allowed values for enums; and
+- a specific repair suggestion.
+
+Use `--json` for deterministic machine-readable output. JSON mode writes JSON only and exits non-zero when any review is invalid. Both modes retain the reviewed, pending, rejected, needs-more-evidence, invalid-file, and issue counts. Malformed JSON reports a safe syntax error and line/column when the runtime parser supplies a position.
+
+The validator aggregates independent problems instead of stopping at the first one. It avoids dependent noise: for example, if `candidateIds` is not an array, membership checks that require a valid candidate array are skipped. Unknown properties remain invalid, and the validator never deletes, fills, migrates, or otherwise repairs a review automatically.
+
+Common repairs include:
+
+- `REVIEWED_CLASSIFICATION_REQUIRED`: choose the human-reviewed classification when a reviewed record still contains `null`.
+- `REVIEW_PREFERRED_NOT_ACCEPTABLE`: add the candidate to `acceptableCandidateIds` or remove it from `preferredCandidateIds`.
+- `REVIEW_ACCEPTABLE_FORBIDDEN_OVERLAP`: remove the candidate from one of the conflicting verdict arrays.
+- `REVIEW_CANDIDATE_UNKNOWN`: regenerate the template or remove a candidate that is absent from `candidateIds` or the linked observation.
+- `REVIEW_STATUS_UNSUPPORTED`, `REVIEW_CLASSIFICATION_UNSUPPORTED`, `REVIEW_RECOMMENDATION_STATUS_UNSUPPORTED`, and `REVIEW_CONFIDENCE_UNSUPPORTED`: select one of the exact allowed values printed by the command.
+- `REVIEW_RATIONALE_EMPTY`: add the human explanation required for a reviewed verdict.
+- `REVIEW_VERSION_UNSUPPORTED`: regenerate the review template with the current framework.
+
+Stable diagnostic codes currently include `REVIEW_JSON_INVALID`, `REVIEW_FILE_READ_FAILED`, `REVIEW_OBSERVATION_NOT_FOUND`, `REVIEW_OBSERVATION_INVALID`, `REVIEW_FILENAME_ID_MISMATCH`, `REVIEW_REQUIRED_FIELD_MISSING`, `REVIEW_UNKNOWN_FIELD`, `REVIEW_FIELD_TYPE_INVALID`, `REVIEW_OBSERVATION_ID_INVALID`, `REVIEW_OBSERVATION_ID_MISMATCH`, `REVIEW_STATUS_UNSUPPORTED`, `REVIEW_VERSION_UNSUPPORTED`, `REVIEW_CANDIDATE_ID_INVALID`, `REVIEW_CANDIDATE_DUPLICATE`, `REVIEW_CANDIDATE_UNKNOWN`, `REVIEW_CANDIDATE_SET_MISMATCH`, `REVIEWED_CLASSIFICATION_REQUIRED`, `REVIEW_CLASSIFICATION_UNSUPPORTED`, `REVIEWED_RECOMMENDATION_STATUS_REQUIRED`, `REVIEW_RECOMMENDATION_STATUS_UNSUPPORTED`, `REVIEWED_CONFIDENCE_REQUIRED`, `REVIEW_CONFIDENCE_UNSUPPORTED`, `REVIEW_PREFERRED_NOT_ACCEPTABLE`, `REVIEW_ACCEPTABLE_FORBIDDEN_OVERLAP`, `REVIEW_PREFERRED_FORBIDDEN_OVERLAP`, `REVIEWED_ACCEPTABLE_CANDIDATE_REQUIRED`, `REVIEW_RATIONALE_EMPTY`, `REVIEW_RATIONALE_TOO_SHORT`, `REVIEW_RATIONALE_TOO_LONG`, and `REVIEW_TEXT_UNSAFE`.
+
+The human reviewer remains responsible for the verdict. Review files and observations stay under ignored `artifacts/locator-observations` paths and must not be committed.
 
 ## Blindness and metrics
 
