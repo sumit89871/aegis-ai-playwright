@@ -1,5 +1,8 @@
 import { containsSensitiveUrlData } from "../diagnostics/redaction.ts";
-import { LOCATOR_CANDIDATE_STRATEGIES } from "../locator-diagnosis/locator-candidate.ts";
+import {
+  LOCATOR_CANDIDATE_STRATEGIES,
+  MAX_LOCATOR_CANDIDATES,
+} from "../locator-diagnosis/locator-candidate.ts";
 import type { LocatorCandidate } from "../locator-diagnosis/locator-candidate.ts";
 import { validateLocatorDiagnosisConclusion } from "../locator-diagnosis/locator-diagnosis-validator.ts";
 import {
@@ -151,7 +154,7 @@ export function validateLocatorObservation(value: unknown): LocatorObservation {
   safeStringArray(clone.failure.requirementIds ?? [], "failure.requirementIds");
   if (
     !Array.isArray(clone.candidateInventory) ||
-    clone.candidateInventory.length > 100
+    clone.candidateInventory.length > MAX_LOCATOR_CANDIDATES
   )
     return fail("candidateInventory must be bounded.");
   const candidateIds = new Set<string>();

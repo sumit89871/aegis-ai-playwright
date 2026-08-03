@@ -6,6 +6,7 @@ import type {
 } from "./locator-candidate.ts";
 import {
   locatorCandidateSortKey,
+  MAX_LOCATOR_CANDIDATES,
   operationRequiresEnabled,
 } from "./locator-candidate.ts";
 import type { LocatorTargetIntent } from "./locator-failure-classifier.ts";
@@ -113,11 +114,19 @@ export function scoreLocatorCandidate(
 export function rankLocatorCandidates(
   candidates: readonly CandidateScoreInput[],
   intent: LocatorTargetIntent,
-  maximumCandidates = 50,
+  maximumCandidates: number = MAX_LOCATOR_CANDIDATES,
 ): {
   readonly candidates: readonly LocatorCandidate[];
   readonly dropped: number;
 } {
+  if (
+    !Number.isInteger(maximumCandidates) ||
+    maximumCandidates < 1 ||
+    maximumCandidates > MAX_LOCATOR_CANDIDATES
+  )
+    throw new Error(
+      `maximumCandidates must be between 1 and ${String(MAX_LOCATOR_CANDIDATES)}.`,
+    );
   const scored = candidates.map((candidate) =>
     scoreLocatorCandidate(candidate, intent),
   );

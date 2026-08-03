@@ -46,6 +46,8 @@ The preparation command creates three ignored files without overwriting any exis
 
 The review starts as `pending`. The human supplies the supported classification, recommendation status, acceptable/preferred/forbidden blind aliases, minimum confidence, and rationale. No command fills those answers automatically.
 
+Candidate inventories and every candidate-verdict array share the framework maximum of 50 entries. A review may therefore retain a large, valid negative-label set, including all 50 candidates when that reflects the human decision. Candidates do not have to appear in acceptable, preferred, or forbidden arrays: those arrays record reviewed judgments, not an exhaustive labelling requirement. Arrays above the shared maximum fail with an actionable validation issue and are never silently truncated or repaired.
+
 ## Validation and eligibility
 
 Blind validation is strict and actionable. It checks schema and review versions, filenames, packet and observation IDs, integrity digests, exact candidate inventory, alias uniqueness, mapping targets, supported enums, rationale rules, unknown fields, and candidate relationships. It aggregates independent issues, supports JSON-only output, prints repository-relative paths, and never repairs a file.

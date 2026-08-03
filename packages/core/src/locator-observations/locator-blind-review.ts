@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 
-import type { LocatorCandidate } from "../locator-diagnosis/locator-candidate.ts";
+import {
+  MAX_LOCATOR_CANDIDATES,
+  type LocatorCandidate,
+} from "../locator-diagnosis/locator-candidate.ts";
 import type {
   LocatorDiagnosisConfidence,
   LocatorRecommendationStatus,
@@ -387,7 +390,10 @@ export function validateLocatorBlindReviewPacket(
     !/^[a-f0-9]{64}$/u.test(value.observationIntegrity)
   )
     throw new Error("Blind review packet observation integrity is invalid.");
-  if (!Array.isArray(value.candidates) || value.candidates.length > 50)
+  if (
+    !Array.isArray(value.candidates) ||
+    value.candidates.length > MAX_LOCATOR_CANDIDATES
+  )
     throw new Error("Blind review packet candidate inventory is invalid.");
   const aliases: string[] = [];
   for (const entry of value.candidates) {
@@ -484,7 +490,10 @@ export function validateLocatorBlindCandidateMapping(
     value.packetIntegrity !== createLocatorBlindPacketIntegrity(packet)
   )
     throw new Error("Blind candidate mapping integrity link is invalid.");
-  if (!Array.isArray(value.aliases))
+  if (
+    !Array.isArray(value.aliases) ||
+    value.aliases.length > MAX_LOCATOR_CANDIDATES
+  )
     throw new Error("Blind candidate mapping aliases must be an array.");
   const aliasFields = new Set(["blindCandidateId", "originalCandidateId"]);
   const aliases = value.aliases.map((entry) => {

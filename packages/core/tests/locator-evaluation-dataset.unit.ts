@@ -5,6 +5,7 @@ import {
   buildLocatorEvaluationAnalysisInput,
   LOCATOR_CALIBRATION_DATASET,
   LOCATOR_VALIDATION_DATASET,
+  MAX_LOCATOR_CANDIDATES,
   validateLocatorEvaluationCase,
   validateLocatorEvaluationDataset,
 } from "../src/index.ts";
@@ -14,6 +15,34 @@ function mutableCase(): Record<string, unknown> {
   return structuredClone(
     LOCATOR_CALIBRATION_DATASET.cases[0],
   ) as unknown as Record<string, unknown>;
+}
+
+function maximumCandidateCase(): LocatorEvaluationCase {
+  const first = LOCATOR_CALIBRATION_DATASET.cases[0];
+  assert.ok(first !== undefined);
+  const descriptor = first.input.candidates[0]?.descriptor;
+  assert.ok(descriptor !== undefined);
+  return {
+    ...structuredClone(first),
+    input: {
+      ...structuredClone(first.input),
+      candidates: Array.from(
+        { length: MAX_LOCATOR_CANDIDATES },
+        (_, index) => ({
+          candidateId: `LOCATOR-${String(index + 1).padStart(3, "0")}`,
+          descriptor: structuredClone(descriptor),
+        }),
+      ),
+    },
+    expected: {
+      ...structuredClone(first.expected),
+      recommendationStatus: "no-change-recommended",
+      acceptableCandidateIds: [],
+      preferredCandidateIds: [],
+      forbiddenCandidateIds: [],
+      locatorChangeAllowed: false,
+    },
+  };
 }
 
 await describe("locator evaluation dataset validation", async () => {
@@ -136,6 +165,57 @@ await describe("locator evaluation dataset validation", async () => {
     const before = JSON.stringify(value);
     validateLocatorEvaluationCase(value);
     assert.equal(JSON.stringify(value), before);
+  });
+
+  await it("accepts verdict arrays through the shared candidate maximum", () => {
+    const value = maximumCandidateCase();
+    const ids = value.input.candidates.map(({ candidateId }) => candidateId);
+    for (const count of [0, 1, 49, MAX_LOCATOR_CANDIDATES]) {
+      assert.doesNotThrow(() =>
+        validateLocatorEvaluationCase({
+          ...value,
+          expected: {
+            ...value.expected,
+            forbiddenCandidateIds: ids.slice(0, count),
+          },
+        }),
+      );
+    }
+  });
+
+  await it("rejects candidate inventories and verdict arrays above the shared maximum", () => {
+    const value = maximumCandidateCase();
+    const firstCandidate = value.input.candidates[0];
+    assert.ok(firstCandidate !== undefined);
+    const extra = {
+      ...firstCandidate,
+      candidateId: "LOCATOR-051",
+    };
+    assert.throws(
+      () =>
+        validateLocatorEvaluationCase({
+          ...value,
+          input: {
+            ...value.input,
+            candidates: [...value.input.candidates, extra],
+          },
+        }),
+      /at most 50/u,
+    );
+    assert.throws(
+      () =>
+        validateLocatorEvaluationCase({
+          ...value,
+          expected: {
+            ...value.expected,
+            forbiddenCandidateIds: [
+              ...value.input.candidates.map(({ candidateId }) => candidateId),
+              "LOCATOR-051",
+            ],
+          },
+        }),
+      /bounded array/u,
+    );
   });
 
   await it("removes expected answers and rationale before diagnosis", () => {

@@ -5,6 +5,7 @@ import {
   classifyLocatorFailure,
   defaultLocatorDiagnosisConfiguration,
   diagnoseLocatorDeterministically,
+  MAX_LOCATOR_CANDIDATES,
   normalizeLocatorEvidence,
   rankLocatorCandidates,
   renderLocatorDiagnosisMarkdown,
@@ -190,7 +191,19 @@ await describe("deterministic locator diagnosis", async () => {
     const defaults = defaultLocatorDiagnosisConfiguration();
     assert.equal(defaults.mode, "deterministic-only");
     assert.equal(defaults.aiAdvisoryEnabled, false);
+    assert.equal(defaults.maximumCandidates, MAX_LOCATOR_CANDIDATES);
     assert.ok(Object.isFrozen(defaults));
+  });
+
+  await it("rejects candidate limits above the shared maximum", () => {
+    assert.throws(
+      () =>
+        validateLocatorDiagnosisConfiguration({
+          ...defaultLocatorDiagnosisConfiguration(),
+          maximumCandidates: MAX_LOCATOR_CANDIDATES + 1,
+        }),
+      /between 1 and 50/u,
+    );
   });
 
   await it("rejects disabling deterministic safeguards", () => {

@@ -10,7 +10,7 @@ Not every failure needs another locator. Hidden, disabled, detached, unstable, o
 
 ## Safe candidate inventory
 
-Collection is read-only and bounded to potentially useful buttons, links, form controls, roles, labels, placeholders, configured test IDs, image alt text, headings, stable IDs, and conservative stable CSS classes. It retains at most 50 candidates by default and records dropped counts. It does not scroll, click, focus, or mutate the page.
+Collection is read-only and bounded to potentially useful buttons, links, form controls, roles, labels, placeholders, configured test IDs, image alt text, headings, stable IDs, and conservative stable CSS classes. The shared supported maximum is 50 retained candidates, and additional candidates are counted as dropped. Collection, observation, review, and evaluation validation all use this same bound. It does not scroll, click, focus, or mutate the page.
 
 The collector never reads form values, password values, cookies, headers, storage, request or response bodies, scripts, styles, `innerHTML`, `outerHTML`, the full DOM, or the full accessibility tree. Candidate-level accessible names use a bounded approximation from `aria-label`, associated labels, alt/title text, safe visible text, role, and placeholder. This approximation is deliberately not presented as the browser’s complete accessible-name computation.
 

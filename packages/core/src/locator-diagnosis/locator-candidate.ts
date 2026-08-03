@@ -3,6 +3,8 @@ import type {
   LocatorTargetIntent,
 } from "./locator-failure-classifier.ts";
 
+export const MAX_LOCATOR_CANDIDATES = 50 as const;
+
 export const LOCATOR_CANDIDATE_STRATEGIES = [
   "role",
   "label",

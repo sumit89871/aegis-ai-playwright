@@ -1,4 +1,5 @@
 import { containsSensitiveUrlData } from "../diagnostics/redaction.ts";
+import { MAX_LOCATOR_CANDIDATES } from "./locator-candidate.ts";
 import { LOCATOR_RECOMMENDATION_STATUSES } from "./locator-diagnosis.ts";
 import type { LocatorDiagnosisConclusion } from "./locator-diagnosis.ts";
 import { LOCATOR_FAILURE_CLASSIFICATIONS } from "./locator-failure-classifier.ts";
@@ -28,7 +29,7 @@ function text(value: unknown, field: string): string {
   return value;
 }
 function array(value: unknown, field: string): readonly unknown[] {
-  if (!Array.isArray(value) || value.length > 50)
+  if (!Array.isArray(value) || value.length > MAX_LOCATOR_CANDIDATES)
     return fail(`${field} must be a bounded array.`);
   return value;
 }

@@ -7,6 +7,7 @@ import {
   LOCATOR_FAILURE_CLASSIFICATIONS,
   type LocatorFailureClassification,
 } from "../locator-diagnosis/locator-failure-classifier.ts";
+import { MAX_LOCATOR_CANDIDATES } from "../locator-diagnosis/locator-candidate.ts";
 import type { LocatorObservation } from "./locator-observation.ts";
 import {
   LOCATOR_OBSERVATION_REVIEW_STATUSES,
@@ -31,6 +32,7 @@ export const LOCATOR_REVIEW_VALIDATION_CODES = [
   "REVIEW_STATUS_UNSUPPORTED",
   "REVIEW_VERSION_UNSUPPORTED",
   "REVIEW_CANDIDATE_ID_INVALID",
+  "REVIEW_CANDIDATE_ARRAY_TOO_LARGE",
   "REVIEW_CANDIDATE_DUPLICATE",
   "REVIEW_CANDIDATE_UNKNOWN",
   "REVIEW_CANDIDATE_SET_MISMATCH",
@@ -218,6 +220,23 @@ function inspectCandidateArray(
         `${field} must be an array of locator candidate IDs.`,
         `Set ${field} to a JSON array, using [] when no candidates apply.`,
         { actualValue: `<${safeType(value)}>` },
+      ),
+    );
+    return {
+      structurallyValid: false,
+      ids: Object.freeze([]),
+      originalIds: Object.freeze([]),
+    };
+  }
+  if (value.length > MAX_LOCATOR_CANDIDATES) {
+    issues.push(
+      issue(
+        "REVIEW_CANDIDATE_ARRAY_TOO_LARGE",
+        "field",
+        fieldPath,
+        `${field} contains ${String(value.length)} candidate IDs; the maximum is ${String(MAX_LOCATOR_CANDIDATES)}.`,
+        `Reduce ${field} to at most ${String(MAX_LOCATOR_CANDIDATES)} reviewed candidate IDs. The validator will not truncate or repair it automatically.`,
+        { actualValue: value.length },
       ),
     );
     return {

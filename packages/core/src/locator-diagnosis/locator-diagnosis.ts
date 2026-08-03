@@ -1,6 +1,7 @@
-import type {
-  LocatorCandidate,
-  LocatorCandidateInventory,
+import {
+  MAX_LOCATOR_CANDIDATES,
+  type LocatorCandidate,
+  type LocatorCandidateInventory,
 } from "./locator-candidate.ts";
 import type { LocatorFailureEvidence } from "./locator-evidence.ts";
 import type { LocatorFailureClassification } from "./locator-failure-classifier.ts";
@@ -102,7 +103,7 @@ export function defaultLocatorDiagnosisConfiguration(
     mode: "deterministic-only",
     aiAdvisoryEnabled: false,
     maximumDurationMs: 3_000,
-    maximumCandidates: 50,
+    maximumCandidates: MAX_LOCATOR_CANDIDATES,
     maximumCandidateTextLength: 120,
     attachJson: true,
     attachMarkdown: true,
@@ -161,7 +162,7 @@ export function validateLocatorDiagnosisConfiguration(
     throw new Error("mode is not a supported locator-diagnosis mode.");
   for (const [field, minimum, maximum] of [
     ["maximumDurationMs", 100, 10_000],
-    ["maximumCandidates", 1, 100],
+    ["maximumCandidates", 1, MAX_LOCATOR_CANDIDATES],
     ["maximumCandidateTextLength", 20, 300],
   ] as const) {
     if (

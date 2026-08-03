@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   formatLocatorCandidate,
+  MAX_LOCATOR_CANDIDATES,
   rankLocatorCandidates,
   scoreLocatorCandidate,
 } from "../src/index.ts";
@@ -35,6 +36,18 @@ const intent = Object.freeze({
 });
 
 await describe("locator candidate scoring", async () => {
+  await it("uses one shared maximum candidate inventory bound", () => {
+    assert.throws(
+      () =>
+        rankLocatorCandidates(
+          [candidate()],
+          intent,
+          MAX_LOCATOR_CANDIDATES + 1,
+        ),
+      /between 1 and 50/u,
+    );
+  });
+
   await it("ranks a unique semantic role above duplicate text", () => {
     const textCandidate: CandidateScoreInput = {
       strategy: "text",

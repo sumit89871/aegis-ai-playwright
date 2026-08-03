@@ -6,6 +6,7 @@ import type {
   LocatorCandidateInventory,
   LocatorCandidateStrategy,
 } from "./locator-candidate.ts";
+import { MAX_LOCATOR_CANDIDATES } from "./locator-candidate.ts";
 import { rankLocatorCandidates } from "./locator-candidate-scorer.ts";
 import type { LocatorTargetIntent } from "./locator-failure-classifier.ts";
 
@@ -240,14 +241,16 @@ export async function collectLocatorCandidates(
   intent: LocatorTargetIntent,
   options: LocatorCandidateCollectionOptions = {},
 ): Promise<LocatorCandidateInventory> {
-  const maximumCandidates = options.maximumCandidates ?? 50;
+  const maximumCandidates = options.maximumCandidates ?? MAX_LOCATOR_CANDIDATES;
   const maximumCandidateTextLength = options.maximumCandidateTextLength ?? 120;
   if (
     !Number.isInteger(maximumCandidates) ||
     maximumCandidates < 1 ||
-    maximumCandidates > 100
+    maximumCandidates > MAX_LOCATOR_CANDIDATES
   )
-    throw new Error("maximumCandidates must be between 1 and 100.");
+    throw new Error(
+      `maximumCandidates must be between 1 and ${String(MAX_LOCATOR_CANDIDATES)}.`,
+    );
   if (
     !Number.isInteger(maximumCandidateTextLength) ||
     maximumCandidateTextLength < 20 ||

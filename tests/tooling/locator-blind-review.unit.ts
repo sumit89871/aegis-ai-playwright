@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   diagnoseLocatorFailure,
   importLocatorDiagnosisObservation,
+  MAX_LOCATOR_CANDIDATES,
   rankLocatorCandidates,
 } from "../../packages/core/src/index.ts";
 import type {
@@ -32,7 +33,9 @@ const evaluateScript = resolve(
   "scripts/locator-blind-holdout-evaluate.ts",
 );
 
-async function fixtureObservation(): Promise<LocatorObservation> {
+async function fixtureObservation(
+  candidateCount = 2,
+): Promise<LocatorObservation> {
   const ranked = rankLocatorCandidates(
     [
       {
@@ -48,9 +51,9 @@ async function fixtureObservation(): Promise<LocatorObservation> {
         editable: false,
         hasBoundingBox: true,
       },
-      {
-        strategy: "text",
-        value: "Save",
+      ...Array.from({ length: candidateCount - 1 }, (_, index) => ({
+        strategy: "text" as const,
+        value: `Alternative ${String(index + 1)}`,
         exact: true,
         scopeHint: null,
         tagName: "span",
@@ -59,9 +62,10 @@ async function fixtureObservation(): Promise<LocatorObservation> {
         enabled: true,
         editable: false,
         hasBoundingBox: true,
-      },
+      })),
     ],
     { operation: "click", strategy: "css", value: ".old" },
+    candidateCount,
   );
   const report = await diagnoseLocatorFailure({
     evidence: {
@@ -107,13 +111,14 @@ async function withFixture(
     relativeRoot: string;
     observation: LocatorObservation;
   }) => Promise<void> | void,
+  candidateCount = 2,
 ): Promise<void> {
   const root = resolve(
     repositoryRoot,
     `artifacts/blind review tests/${String(process.pid)}-${Math.random().toString(16).slice(2)}`,
   );
   const relativeRoot = relative(repositoryRoot, root);
-  const observation = await fixtureObservation();
+  const observation = await fixtureObservation(candidateCount);
   await mkdir(join(root, "pending"), { recursive: true });
   await writeFile(
     join(root, "pending", `${observation.observationId}.json`),
@@ -225,6 +230,116 @@ await describe("blind review command workflow", async () => {
         automaticHealing: false,
       });
     });
+  });
+
+  await it("evaluates a valid maximum-sized blind candidate verdict", async () => {
+    await withFixture(async ({ root, relativeRoot }) => {
+      assert.equal(run(prepareScript, [`--root=${relativeRoot}`]).status, 0);
+      const mappingName = (await readdir(join(root, "blind/mappings")))[0];
+      const reviewName = (await readdir(join(root, "blind/reviews")))[0];
+      assert.ok(mappingName !== undefined && reviewName !== undefined);
+      const mapping = JSON.parse(
+        await readFile(join(root, "blind/mappings", mappingName), "utf8"),
+      ) as LocatorBlindCandidateMapping;
+      const reviewPath = join(root, "blind/reviews", reviewName);
+      const review = JSON.parse(
+        await readFile(reviewPath, "utf8"),
+      ) as LocatorBlindReview;
+      const preferred = mapping.aliases.find(
+        ({ originalCandidateId }) => originalCandidateId === "LOCATOR-001",
+      )?.blindCandidateId;
+      assert.ok(preferred !== undefined);
+      const completed: LocatorBlindReview = {
+        ...review,
+        reviewStatus: "reviewed",
+        expectedClassification: "selector-no-match",
+        expectedRecommendationStatus: "candidates-available",
+        acceptableBlindCandidateIds: [preferred],
+        preferredBlindCandidateIds: [preferred],
+        forbiddenBlindCandidateIds: review.blindCandidateIds.filter(
+          (entry) => entry !== preferred,
+        ),
+        minimumAcceptableConfidence: "medium",
+        reviewerRationale:
+          "Independent reviewer selected one candidate and rejected the remaining bounded inventory.",
+      };
+      await writeFile(
+        reviewPath,
+        `${JSON.stringify(completed, null, 2)}\n`,
+        "utf8",
+      );
+      const validation = run(validateScript, [
+        "--json",
+        `--root=${relativeRoot}`,
+      ]);
+      assert.equal(validation.status, 0, validation.stderr);
+      const evaluation = run(evaluateScript, [
+        "--json",
+        `--root=${relativeRoot}`,
+      ]);
+      assert.equal(evaluation.status, 0, evaluation.stderr);
+      assert.doesNotThrow(() => JSON.parse(evaluation.stdout));
+    }, MAX_LOCATOR_CANDIDATES);
+  });
+
+  await it("reports an above-limit blind verdict safely before evaluation", async () => {
+    await withFixture(async ({ root, relativeRoot }) => {
+      assert.equal(run(prepareScript, [`--root=${relativeRoot}`]).status, 0);
+      const reviewName = (await readdir(join(root, "blind/reviews")))[0];
+      assert.ok(reviewName !== undefined);
+      const reviewPath = join(root, "blind/reviews", reviewName);
+      const review = JSON.parse(
+        await readFile(reviewPath, "utf8"),
+      ) as LocatorBlindReview;
+      const first = review.blindCandidateIds[0];
+      assert.ok(first !== undefined);
+      const invalid = {
+        ...review,
+        reviewStatus: "reviewed",
+        expectedClassification: "selector-no-match",
+        expectedRecommendationStatus: "candidates-available",
+        acceptableBlindCandidateIds: [first],
+        preferredBlindCandidateIds: [first],
+        forbiddenBlindCandidateIds: [
+          ...review.blindCandidateIds,
+          "BLIND-CANDIDATE-051",
+        ],
+        minimumAcceptableConfidence: "medium",
+        reviewerRationale:
+          "Independent reviewer supplied an intentionally oversized negative-label set.",
+      };
+      await writeFile(
+        reviewPath,
+        `${JSON.stringify(invalid, null, 2)}\n`,
+        "utf8",
+      );
+      const validation = run(validateScript, [
+        "--json",
+        `--root=${relativeRoot}`,
+      ]);
+      assert.equal(validation.status, 1);
+      assert.equal(validation.stderr, "");
+      const parsed = JSON.parse(validation.stdout) as {
+        files: {
+          issues: {
+            code: string;
+            fieldPath: string;
+            actualValue?: number;
+            message: string;
+            suggestion: string;
+          }[];
+        }[];
+      };
+      const issue = parsed.files[0]?.issues.find(
+        ({ code }) => code === "BLIND_REVIEW_CANDIDATE_ARRAY_TOO_LARGE",
+      );
+      assert.ok(issue !== undefined);
+      assert.equal(issue.fieldPath, "$.forbiddenBlindCandidateIds");
+      assert.equal(issue.actualValue, MAX_LOCATOR_CANDIDATES + 1);
+      assert.match(issue.message, /51.*maximum.*50/iu);
+      assert.match(issue.suggestion, /not truncate|not.*repair/iu);
+      assert.doesNotMatch(validation.stdout, /"LOCATOR-\d|Error:|\n\s+at /u);
+    }, MAX_LOCATOR_CANDIDATES);
   });
 
   await it("reports malformed review JSON safely in JSON-only mode", async () => {

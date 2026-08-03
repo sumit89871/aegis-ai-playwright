@@ -1,5 +1,8 @@
 import { containsSensitiveUrlData } from "../diagnostics/redaction.ts";
-import { LOCATOR_CANDIDATE_STRATEGIES } from "../locator-diagnosis/locator-candidate.ts";
+import {
+  LOCATOR_CANDIDATE_STRATEGIES,
+  MAX_LOCATOR_CANDIDATES,
+} from "../locator-diagnosis/locator-candidate.ts";
 import { LOCATOR_RECOMMENDATION_STATUSES } from "../locator-diagnosis/locator-diagnosis.ts";
 import { LOCATOR_FAILURE_CLASSIFICATIONS } from "../locator-diagnosis/locator-failure-classifier.ts";
 import {
@@ -54,6 +57,10 @@ function uniqueStrings(
   return Object.freeze([...entries].sort());
 }
 
+function isBoundedArray(value: unknown, maximum: number): boolean {
+  return Array.isArray(value) && value.length <= maximum;
+}
+
 export function validateLocatorEvaluationCase(
   value: LocatorEvaluationCase,
 ): LocatorEvaluationCase {
@@ -77,6 +84,10 @@ export function validateLocatorEvaluationCase(
     return fail("expected recommendation status is unsupported.");
   if (!["high", "medium", "low"].includes(clone.expected.minimumConfidence))
     return fail("expected minimum confidence is unsupported.");
+  if (!isBoundedArray(clone.input.candidates, MAX_LOCATOR_CANDIDATES))
+    return fail(
+      `input candidates must contain at most ${String(MAX_LOCATOR_CANDIDATES)} entries.`,
+    );
   const candidateIds = clone.input.candidates.map(({ candidateId }) => {
     if (!CANDIDATE_ID.test(candidateId)) return fail("candidateId is invalid.");
     return candidateId;
@@ -97,14 +108,17 @@ export function validateLocatorEvaluationCase(
   const acceptable = uniqueStrings(
     clone.expected.acceptableCandidateIds,
     "acceptableCandidateIds",
+    MAX_LOCATOR_CANDIDATES,
   );
   const preferred = uniqueStrings(
     clone.expected.preferredCandidateIds,
     "preferredCandidateIds",
+    MAX_LOCATOR_CANDIDATES,
   );
   const forbidden = uniqueStrings(
     clone.expected.forbiddenCandidateIds,
     "forbiddenCandidateIds",
+    MAX_LOCATOR_CANDIDATES,
   );
   for (const id of [...acceptable, ...forbidden])
     if (!candidateIds.includes(id))

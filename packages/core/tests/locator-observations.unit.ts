@@ -11,6 +11,7 @@ import {
   importLocatorDiagnosisObservation,
   inspectLocatorObservationReview,
   inspectLocatorBlindReview,
+  MAX_LOCATOR_CANDIDATES,
   mapRuntimeLocatorCandidateToObservationCandidate,
   rankLocatorCandidates,
   renderLocatorHoldoutMarkdown,
@@ -118,6 +119,70 @@ function reviewed(
 function reidentify(value: LocatorObservation): LocatorObservation {
   const draft = { ...structuredClone(value), observationId: "" };
   return { ...draft, observationId: createLocatorObservationId(draft) };
+}
+
+async function maximumCandidateObservation(): Promise<LocatorObservation> {
+  const ranked = rankLocatorCandidates(
+    Array.from({ length: MAX_LOCATOR_CANDIDATES }, (_, index) => ({
+      strategy: "text" as const,
+      value: `Choice ${String(index + 1)}`,
+      exact: true,
+      scopeHint: null,
+      tagName: "button",
+      matchCount: 1,
+      visible: true,
+      enabled: true,
+      editable: false,
+      hasBoundingBox: true,
+    })),
+    { operation: "click", strategy: "text", value: "Choice" },
+    MAX_LOCATOR_CANDIDATES,
+  );
+  const diagnosis = await diagnoseLocatorFailure({
+    evidence: {
+      errorMessage: "getByText('Choice') resolved to no elements",
+      pageReady: true,
+      pageAvailable: true,
+    },
+    candidateInventory: {
+      status: "collected",
+      candidates: ranked.candidates,
+      droppedCandidateCount: ranked.dropped,
+      scannedElementCount: MAX_LOCATOR_CANDIDATES,
+      intent: { operation: "click", strategy: "text", value: "Choice" },
+    },
+  });
+  const imported = importLocatorDiagnosisObservation(diagnosis, {
+    applicationAlias: "consumer-a",
+  });
+  assert.equal(imported.status, "imported");
+  return imported.observation;
+}
+
+async function candidateCountObservation(
+  count: number,
+): Promise<LocatorObservation> {
+  const value = await maximumCandidateObservation();
+  if (count === MAX_LOCATOR_CANDIDATES) return value;
+  const retained = value.candidateInventory.slice(0, count);
+  const retainedIds = new Set(retained.map(({ candidateId }) => candidateId));
+  return reidentify({
+    ...structuredClone(value),
+    candidateInventory: retained,
+    deterministicDiagnosis: {
+      ...structuredClone(value.deterministicDiagnosis),
+      recommendationStatus:
+        count === 0 ? "insufficient-evidence" : "candidates-available",
+      confidence: count === 0 ? "low" : value.deterministicDiagnosis.confidence,
+      rankedCandidates: value.deterministicDiagnosis.rankedCandidates.filter(
+        ({ candidateId }) => retainedIds.has(candidateId),
+      ),
+    },
+    provenance: {
+      ...structuredClone(value.provenance),
+      candidatesCollected: count,
+    },
+  });
 }
 
 await describe("locator shadow observation validation", async () => {
@@ -1194,44 +1259,15 @@ await describe("blind locator review isolation", async () => {
     );
   });
 
-  await it("keeps a 50-candidate blind inventory bounded", async () => {
-    const ranked = rankLocatorCandidates(
-      Array.from({ length: 50 }, (_, index) => ({
-        strategy: "text" as const,
-        value: `Choice ${String(index + 1)}`,
-        exact: true,
-        scopeHint: null,
-        tagName: "button",
-        matchCount: 1,
-        visible: true,
-        enabled: true,
-        editable: false,
-        hasBoundingBox: true,
-      })),
-      { operation: "click", strategy: "text", value: "Choice" },
-      50,
+  await it("keeps the maximum blind candidate inventory bounded", async () => {
+    const artifacts = createLocatorBlindReviewArtifacts(
+      await maximumCandidateObservation(),
     );
-    const diagnosis = await diagnoseLocatorFailure({
-      evidence: {
-        errorMessage: "getByText('Choice') resolved to no elements",
-        pageReady: true,
-        pageAvailable: true,
-      },
-      candidateInventory: {
-        status: "collected",
-        candidates: ranked.candidates,
-        droppedCandidateCount: ranked.dropped,
-        scannedElementCount: 50,
-        intent: { operation: "click", strategy: "text", value: "Choice" },
-      },
-    });
-    const imported = importLocatorDiagnosisObservation(diagnosis, {
-      applicationAlias: "consumer-a",
-    });
-    assert.equal(imported.status, "imported");
-    const artifacts = createLocatorBlindReviewArtifacts(imported.observation);
-    assert.equal(artifacts.packet.candidates.length, 50);
-    assert.equal(new Set(artifacts.review.blindCandidateIds).size, 50);
+    assert.equal(artifacts.packet.candidates.length, MAX_LOCATOR_CANDIDATES);
+    assert.equal(
+      new Set(artifacts.review.blindCandidateIds).size,
+      MAX_LOCATOR_CANDIDATES,
+    );
   });
 
   await it("validates packet and mapping integrity", async () => {
@@ -1285,6 +1321,55 @@ await describe("blind locator review isolation", async () => {
       artifacts.packet,
     );
     assert.equal(result.valid, true);
+  });
+
+  await it("accepts blind verdict arrays through the shared maximum", async () => {
+    const artifacts = createLocatorBlindReviewArtifacts(
+      await maximumCandidateObservation(),
+    );
+    for (const count of [0, 1, 49, MAX_LOCATOR_CANDIDATES]) {
+      const result = inspectLocatorBlindReview(
+        {
+          ...artifacts.review,
+          reviewStatus: "reviewed",
+          expectedClassification: "selector-no-match",
+          expectedRecommendationStatus: "no-change-recommended",
+          forbiddenBlindCandidateIds: artifacts.review.blindCandidateIds.slice(
+            0,
+            count,
+          ),
+          minimumAcceptableConfidence: "medium",
+          reviewerRationale:
+            "Independent review found no locator candidate suitable for replacement.",
+        },
+        artifacts.packet,
+      );
+      assert.equal(result.valid, true, `count ${String(count)}`);
+    }
+  });
+
+  await it("rejects an above-maximum blind verdict with an actionable issue", async () => {
+    const artifacts = createLocatorBlindReviewArtifacts(
+      await maximumCandidateObservation(),
+    );
+    const result = inspectLocatorBlindReview(
+      {
+        ...artifacts.review,
+        forbiddenBlindCandidateIds: [
+          ...artifacts.review.blindCandidateIds,
+          "BLIND-CANDIDATE-051",
+        ],
+      },
+      artifacts.packet,
+    );
+    const issue = result.issues.find(
+      ({ code }) => code === "BLIND_REVIEW_CANDIDATE_ARRAY_TOO_LARGE",
+    );
+    assert.ok(issue !== undefined);
+    assert.equal(issue.fieldPath, "$.forbiddenBlindCandidateIds");
+    assert.equal(issue.actualValue, MAX_LOCATOR_CANDIDATES + 1);
+    assert.match(issue.message, /51.*maximum.*50/iu);
+    assert.match(issue.suggestion, /not truncate|not.*repair/iu);
   });
 
   await it("accepts a valid pending zero-answer review", async () => {
@@ -1371,6 +1456,75 @@ await describe("blind locator review isolation", async () => {
 });
 
 await describe("blind holdout eligibility", async () => {
+  await it("keeps accepted blind reviews compatible with evaluation bounds", async () => {
+    for (const count of [0, 1, MAX_LOCATOR_CANDIDATES]) {
+      const value = await candidateCountObservation(count);
+      const artifacts = createLocatorBlindReviewArtifacts(value);
+      const review: LocatorBlindReview =
+        count === 0
+          ? {
+              ...artifacts.review,
+              reviewStatus: "reviewed",
+              expectedClassification: "selector-no-match",
+              expectedRecommendationStatus: "insufficient-evidence",
+              minimumAcceptableConfidence: "low",
+              reviewerRationale:
+                "Independent review found insufficient candidate evidence.",
+            }
+          : completedBlindReview(artifacts);
+      assert.equal(
+        inspectLocatorBlindReview(review, artifacts.packet).valid,
+        true,
+      );
+      const translated = translateLocatorBlindReview(
+        value,
+        artifacts.packet,
+        artifacts.mapping,
+        review,
+      );
+      assert.doesNotThrow(() =>
+        validateLocatorObservationReview(translated, value),
+      );
+      const result = await runLocatorBlindHoldoutEvaluation([
+        {
+          observation: value,
+          packet: artifacts.packet,
+          mapping: artifacts.mapping,
+          review,
+        },
+      ]);
+      assert.equal(result.counts.blindHoldoutReviewed, 1);
+    }
+  });
+
+  await it("evaluates a maximum-sized all-forbidden verdict", async () => {
+    const value = await maximumCandidateObservation();
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const review: LocatorBlindReview = {
+      ...artifacts.review,
+      reviewStatus: "reviewed",
+      expectedClassification: "selector-no-match",
+      expectedRecommendationStatus: "no-change-recommended",
+      forbiddenBlindCandidateIds: artifacts.review.blindCandidateIds,
+      minimumAcceptableConfidence: "medium",
+      reviewerRationale:
+        "Independent review rejected every candidate without requiring exhaustive labels elsewhere.",
+    };
+    assert.equal(
+      inspectLocatorBlindReview(review, artifacts.packet).valid,
+      true,
+    );
+    const result = await runLocatorBlindHoldoutEvaluation([
+      {
+        observation: value,
+        packet: artifacts.packet,
+        mapping: artifacts.mapping,
+        review,
+      },
+    ]);
+    assert.equal(result.counts.blindHoldoutReviewed, 1);
+  });
+
   await it("separates calibration reviews from blind holdout reviews", async () => {
     const value = await observation();
     const artifacts = createLocatorBlindReviewArtifacts(value);
