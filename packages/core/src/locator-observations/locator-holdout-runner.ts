@@ -117,7 +117,7 @@ function evaluationCase(
     caseId: `LOC-EVAL-VAL-${String(index + 1).padStart(3, "0")}`,
     title: `Reviewed shadow observation ${String(index + 1).padStart(3, "0")}`,
     description:
-      "Blind evaluation of a sanitized locator-diagnosis observation.",
+      "Pilot/calibration evaluation of a sanitized locator-diagnosis observation.",
     category: category(observation),
     sourceType:
       observation.sourceType === "controlled-browser"
@@ -216,7 +216,7 @@ export async function runLocatorHoldoutEvaluation(
           id: "validation",
           version: "1.0.0",
           description:
-            "Independent reviewed shadow observations kept separate from analyser input.",
+            "Reviewed pilot/calibration observations kept separate from analyser runtime input.",
           cases: Object.freeze(cases),
         });
   const mode = options.mode ?? DEFAULT_LOCATOR_HOLDOUT_MODE;
@@ -280,8 +280,8 @@ export async function runLocatorHoldoutEvaluation(
     count === 0
       ? "Zero reviewed observations: holdout evaluation is not yet meaningful. Synthetic test fixtures are not production evidence."
       : meaningful
-        ? "Metrics describe independent reviewed observations; they do not guarantee production accuracy."
-        : `Only ${String(count)} reviewed observations are available; at least ${String(MINIMUM_MEANINGFUL_HOLDOUT_SAMPLE_SIZE)} independent real-shadow observations are recommended before interpreting accuracy.`;
+        ? "Metrics describe reviewed pilot/calibration observations; they are not unbiased blind holdout accuracy."
+        : `Only ${String(count)} pilot/calibration observations are available; at least ${String(MINIMUM_MEANINGFUL_HOLDOUT_SAMPLE_SIZE)} independently blind-reviewed real-shadow observations are recommended before interpreting accuracy.`;
   return Object.freeze({
     schemaVersion: "1.0.0",
     mode,

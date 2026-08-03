@@ -56,6 +56,8 @@ The existing Chromium, Firefox, and WebKit matrix also runs eight local data-pag
 
 Automatic healing remains absent. The next safe step is additional human-reviewed shadow-mode evidence from diverse applications, not automatic locator replacement.
 
-## Independent shadow holdout
+## Pilot reviews and independent blind holdout
 
-The committed calibration and validation packs remain controlled and repository-visible. They must not be combined with the separate shadow holdout percentage. The holdout workflow imports sanitized diagnosis attachments, stores human expected answers separately, and scores only reviewed observations after blind diagnosis. With zero reviewed observations it reports N/A and an insufficient-sample warning, not 100% accuracy. See [Locator shadow observations](locator-shadow-observations.md).
+The committed calibration and validation packs remain controlled and repository-visible. Legacy observation reviews also expose Aegis's answer and are labelled pilot/calibration evidence. Neither may be combined with independent blind holdout percentages.
+
+The blind workflow hides the actual diagnosis, scores, ranked order, and original candidate IDs before human review. Its evaluator reconnects neutral aliases only after review completion and reports pilot and blind counts separately. With zero blind reviews it reports N/A and an insufficient-sample warning, not 100% accuracy. See [Locator shadow observations](locator-shadow-observations.md).

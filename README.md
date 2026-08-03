@@ -221,7 +221,7 @@ npm run ai:locator:evaluate -- --mode=mock-ai
 
 See [Locator-diagnosis evaluation](docs/locator-diagnosis-evaluation.md). A controlled benchmark does not prove production accuracy, and automatic healing remains absent.
 
-Shadow observations add a privacy-safe path from real Playwright locator-diagnosis attachments to independent human review. Observation evidence and expected answers are stored separately, and the blind holdout evaluator sees only the observation before comparing its result with the review. Local observation, review, and report files remain ignored.
+Shadow observations add a privacy-safe path from real Playwright locator-diagnosis attachments to human review. The original review commands remain useful for pilot and calibration work, but those files expose Aegis's diagnosis, scores, ranked IDs, and therefore are not unbiased holdout evidence. A separate blind workflow removes the verdict and ranking before an independent reviewer sees the case. Local observations, packets, private mappings, reviews, and reports remain ignored.
 
 ```powershell
 npm run ai:locator:observations:collect -- --input=<relative-test-results-path>
@@ -230,6 +230,9 @@ npm run ai:locator:observations:validate-reviews
 npm run ai:locator:observations:validate-reviews -- --json
 npm run ai:locator:holdout:evaluate
 npm run ai:locator:holdout:evaluate -- --json
+npm run ai:locator:observations:prepare-blind-review -- --id=<observation-id>
+npm run ai:locator:observations:validate-blind-reviews
+npm run ai:locator:holdout:evaluate:blind
 ```
 
-Review validation reports every safely detectable field and relationship problem with a stable code, JSON field path, allowed values, and a suggested human repair. It never edits a review. See [Locator shadow observations](docs/locator-shadow-observations.md). Synthetic fixtures validate the workflow but are not production evidence; no accuracy claim is meaningful until enough independent observations have been reviewed. Locator replay and self-healing remain absent.
+Blind packets show neutral `BLIND-CANDIDATE-*` aliases in a reproducible order independent of Aegis ranking. The original-ID mapping is a separate private ignored artifact and is used only after review validation. Review validation reports actionable issues and never edits a review. See [Locator shadow observations](docs/locator-shadow-observations.md). Synthetic fixtures validate the workflow but are not production evidence; sample size alone does not authorize replay. Locator replay and self-healing remain absent.

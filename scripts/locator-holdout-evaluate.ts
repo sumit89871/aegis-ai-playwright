@@ -109,7 +109,7 @@ else {
   const percent = (value: number | null): string =>
     value === null ? "N/A" : `${(value * 100).toFixed(1)}%`;
   console.log(
-    `Locator holdout: ${result.status.toUpperCase()} (${String(result.reviewedObservationCount)} reviewed)`,
+    `Locator pilot/calibration evaluation: ${result.status.toUpperCase()} (${String(result.reviewedObservationCount)} reviewed)`,
   );
   console.log(result.notice);
   console.log(

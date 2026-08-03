@@ -50,4 +50,4 @@ Passing this controlled benchmark supports continued shadow-mode review; it does
 
 ## Shadow observations
 
-Applicable `locator-diagnosis.json` attachments can be imported into a bounded, host-free observation for independent review. The observation reuses the existing diagnosis and candidate inventory; screenshots, traces, HTML, form values, URLs, and secrets are not copied. Human expected answers live in a separate review file and never enter diagnosis input. See [Locator shadow observations](locator-shadow-observations.md) for the collection and blind evaluation workflow.
+Applicable `locator-diagnosis.json` attachments can be imported into a bounded, host-free observation. Screenshots, traces, HTML, form values, URLs, and secrets are not copied. Because the observation still contains the diagnosis and score-ranked IDs, its legacy review is pilot/calibration evidence. Independent holdout review uses a separate redacted packet with neutral aliases; expected answers never enter diagnosis input. See [Locator shadow observations](locator-shadow-observations.md).

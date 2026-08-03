@@ -5,3 +5,5 @@ export * from "./locator-observation-review.ts";
 export * from "./locator-observation-review-validation.ts";
 export * from "./locator-holdout-runner.ts";
 export * from "./locator-holdout-report.ts";
+export * from "./locator-blind-review.ts";
+export * from "./locator-blind-holdout.ts";

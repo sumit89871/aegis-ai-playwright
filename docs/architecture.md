@@ -93,7 +93,9 @@ Framework quality needs only the locked npm workspaces. Browser runtime checks u
 
 The generic locator-observation module imports the existing sanitized `locator-diagnosis.json` contract from any Playwright consumer. Filesystem orchestration stays in thin root scripts; core receives plain JSON and never imports a consumer. Content-derived anonymous IDs deduplicate records without retaining a hostname, repository path, user, or machine identity.
 
-Observation and human-review records are separate. The holdout adapter constructs analyser input only from the observation, invokes the existing deterministic locator diagnosis and evaluation metrics, and compares the result with review data afterward. Local pending observations, review files, and reports are ignored artifacts. No component can apply a candidate, replay an action, or modify source.
+Observation and legacy human-review records are separate, but the observation itself contains Aegis's verdict and score-ranked candidate IDs. Those reviews are therefore explicitly pilot/calibration evidence. The blind boundary uses an allowlisted reviewer packet with neutral, deterministically reordered aliases; it excludes diagnosis, scores, stability, rationale, provenance outcome, original IDs, and ranking. A private ignored mapping links packet aliases to original IDs and carries observation and packet integrity digests.
+
+The blind holdout adapter validates all four records, builds analyser input from the observation alone, and only then translates the human verdict for comparison. It reports pilot/calibration and blind counts separately. Local pending observations, packets, mappings, reviews, and reports are ignored artifacts. No component can apply a candidate, replay an action, call a provider, or modify source.
 
 ## Why there is no BasePage
 

@@ -162,6 +162,12 @@ async function collectDoctorInput(
       "validateLocatorObservationReview",
       "runLocatorHoldoutEvaluation",
       "renderLocatorHoldoutMarkdown",
+      "createLocatorBlindReviewArtifacts",
+      "validateLocatorBlindReviewPacket",
+      "validateLocatorBlindCandidateMapping",
+      "validateLocatorBlindReview",
+      "runLocatorBlindHoldoutEvaluation",
+      "renderLocatorBlindHoldoutMarkdown",
     ].every((name) => coreExports.includes(name));
     locatorObservationSchemaValid =
       core.LOCATOR_OBSERVATION_SCHEMA_VERSION === "1.0.0" &&

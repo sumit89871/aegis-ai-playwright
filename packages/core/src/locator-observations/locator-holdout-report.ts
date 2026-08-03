@@ -20,7 +20,7 @@ export function renderLocatorHoldoutMarkdown(
 ): string {
   const metrics = result.metrics;
   const lines = [
-    "# Locator-diagnosis blind holdout evaluation",
+    "# Locator-diagnosis pilot/calibration evaluation",
     "",
     "## Executive summary",
     "",
@@ -66,6 +66,7 @@ export function renderLocatorHoldoutMarkdown(
     "## Limitations",
     "",
     "- Controlled and synthetic observations are test fixtures, not real-world accuracy evidence.",
+    "- Legacy reviews expose Aegis diagnosis and ranked candidate IDs, so they are pilot/calibration evidence rather than unbiased blind holdout evidence.",
     "- A repository-visible reviewed sample is not a guarantee of future production behavior.",
     "- The evaluator never applies a locator, retries an action, or modifies source.",
   ];

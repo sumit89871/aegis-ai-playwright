@@ -3,20 +3,28 @@ import { describe, it } from "node:test";
 
 import {
   buildLocatorHoldoutAnalysisInput,
+  createLocatorBlindReviewArtifacts,
   createLocatorObservationId,
   createLocatorObservationReviewTemplate,
   deduplicateLocatorObservations,
   diagnoseLocatorFailure,
   importLocatorDiagnosisObservation,
   inspectLocatorObservationReview,
+  inspectLocatorBlindReview,
   mapRuntimeLocatorCandidateToObservationCandidate,
   rankLocatorCandidates,
   renderLocatorHoldoutMarkdown,
+  renderLocatorBlindHoldoutMarkdown,
+  runLocatorBlindHoldoutEvaluation,
   runLocatorHoldoutEvaluation,
   validateLocatorObservation,
   validateLocatorObservationReview,
+  validateLocatorBlindCandidateMapping,
+  validateLocatorBlindReviewPacket,
+  translateLocatorBlindReview,
 } from "../src/index.ts";
 import type {
+  LocatorBlindReview,
   LocatorCandidate,
   LocatorDiagnosisReport,
   LocatorObservation,
@@ -1035,5 +1043,398 @@ await describe("blind locator holdout evaluation", async () => {
       /<\/?\w+|bearer\s+|C:\\Users|```(?:sh|bash|powershell)/iu,
     );
     assert.match(markdown, /not real-world accuracy evidence/u);
+  });
+});
+
+function completedBlindReview(
+  value: Awaited<ReturnType<typeof createLocatorBlindReviewArtifacts>>,
+): LocatorBlindReview {
+  const preferred = value.mapping.aliases.find(
+    ({ originalCandidateId }) => originalCandidateId === "LOCATOR-001",
+  )?.blindCandidateId;
+  assert.ok(preferred !== undefined);
+  const forbidden = value.review.blindCandidateIds.filter(
+    (candidateId) => candidateId !== preferred,
+  );
+  return {
+    ...value.review,
+    reviewStatus: "reviewed",
+    expectedClassification: "selector-no-match",
+    expectedRecommendationStatus: "candidates-available",
+    acceptableBlindCandidateIds: [preferred],
+    preferredBlindCandidateIds: [preferred],
+    forbiddenBlindCandidateIds: forbidden,
+    minimumAcceptableConfidence: "medium",
+    reviewerRationale:
+      "The unique semantic candidate is acceptable after independent review.",
+  };
+}
+
+await describe("blind locator review isolation", async () => {
+  await it("removes Aegis verdict, score, stability, rationale, and original IDs", async () => {
+    const artifacts = createLocatorBlindReviewArtifacts(await observation());
+    const packet = JSON.stringify(artifacts.packet);
+    assert.doesNotMatch(
+      packet,
+      /deterministicDiagnosis|recommendationStatus|rankedCandidates|recommendedNextStep|deterministicScore|stability|rationale|LOCATOR-00/iu,
+    );
+    assert.doesNotMatch(packet, /AI output|provenance/iu);
+    assert.match(packet, /BLIND-CANDIDATE-001/u);
+  });
+
+  await it("uses an explicit safe candidate allowlist", async () => {
+    const artifacts = createLocatorBlindReviewArtifacts(await observation());
+    const candidate = artifacts.packet.candidates[0];
+    assert.ok(candidate !== undefined);
+    assert.deepEqual(
+      Object.keys(candidate)
+        .filter((key) => !["name", "role", "value"].includes(key))
+        .sort(),
+      [
+        "blindCandidateId",
+        "editable",
+        "enabled",
+        "exact",
+        "hasBoundingBox",
+        "matchCount",
+        "scopeHint",
+        "strategy",
+        "tagName",
+        "visible",
+      ],
+    );
+    assert.equal(
+      [candidate.name, candidate.role, candidate.value].filter(
+        (entry) => entry !== undefined,
+      ).length > 0,
+      true,
+    );
+  });
+
+  await it("does not expose secrets, HTML, DOM, or absolute paths", async () => {
+    const packet = JSON.stringify(
+      createLocatorBlindReviewArtifacts(await observation()).packet,
+    );
+    assert.doesNotMatch(
+      packet,
+      /bearer\s+|api[_-]?key|password=|<html|innerHTML|outerHTML|C:\\Users|\/home\//iu,
+    );
+  });
+
+  await it("creates deterministic packet aliases and ordering", async () => {
+    const value = await observation();
+    const first = createLocatorBlindReviewArtifacts(value);
+    const second = createLocatorBlindReviewArtifacts(value);
+    assert.deepEqual(first, second);
+    assert.equal(
+      first.mapping.aliases[0]?.originalCandidateId === "LOCATOR-001",
+      false,
+    );
+    assert.equal(
+      new Set(first.review.blindCandidateIds).size,
+      first.review.blindCandidateIds.length,
+    );
+  });
+
+  await it("produces platform-independent canonical packet content", async () => {
+    const first = createLocatorBlindReviewArtifacts(await observation());
+    const second = createLocatorBlindReviewArtifacts(await observation());
+    assert.equal(JSON.stringify(first.packet), JSON.stringify(second.packet));
+    assert.doesNotMatch(JSON.stringify(first.packet), /\\/u);
+  });
+
+  await it("supports a zero-candidate blind packet", async () => {
+    const diagnosis = await diagnoseLocatorFailure({
+      evidence: {
+        errorMessage: "locator('.missing') resolved to no elements",
+        pageReady: true,
+        pageAvailable: false,
+      },
+      candidateInventory: {
+        status: "unavailable",
+        candidates: [],
+        droppedCandidateCount: 0,
+        scannedElementCount: 0,
+        intent: { operation: "click", strategy: "css", value: ".missing" },
+      },
+    });
+    const imported = importLocatorDiagnosisObservation(diagnosis, {
+      applicationAlias: "consumer-a",
+    });
+    assert.equal(imported.status, "imported");
+    const artifacts = createLocatorBlindReviewArtifacts(imported.observation);
+    assert.deepEqual(artifacts.packet.candidates, []);
+    assert.deepEqual(artifacts.mapping.aliases, []);
+    assert.deepEqual(artifacts.review.blindCandidateIds, []);
+  });
+
+  await it("supports a one-candidate blind packet", async () => {
+    const value = await observation();
+    const candidate = value.candidateInventory[0];
+    assert.ok(candidate !== undefined);
+    const single = reidentify({
+      ...structuredClone(value),
+      candidateInventory: [candidate],
+      deterministicDiagnosis: {
+        ...structuredClone(value.deterministicDiagnosis),
+        rankedCandidates: value.deterministicDiagnosis.rankedCandidates.filter(
+          ({ candidateId }) => candidateId === "LOCATOR-001",
+        ),
+      },
+      provenance: {
+        ...structuredClone(value.provenance),
+        candidatesCollected: 1,
+      },
+    });
+    const artifacts = createLocatorBlindReviewArtifacts(single);
+    assert.equal(artifacts.packet.candidates.length, 1);
+    assert.equal(
+      artifacts.mapping.aliases[0]?.originalCandidateId,
+      "LOCATOR-001",
+    );
+  });
+
+  await it("keeps a 50-candidate blind inventory bounded", async () => {
+    const ranked = rankLocatorCandidates(
+      Array.from({ length: 50 }, (_, index) => ({
+        strategy: "text" as const,
+        value: `Choice ${String(index + 1)}`,
+        exact: true,
+        scopeHint: null,
+        tagName: "button",
+        matchCount: 1,
+        visible: true,
+        enabled: true,
+        editable: false,
+        hasBoundingBox: true,
+      })),
+      { operation: "click", strategy: "text", value: "Choice" },
+      50,
+    );
+    const diagnosis = await diagnoseLocatorFailure({
+      evidence: {
+        errorMessage: "getByText('Choice') resolved to no elements",
+        pageReady: true,
+        pageAvailable: true,
+      },
+      candidateInventory: {
+        status: "collected",
+        candidates: ranked.candidates,
+        droppedCandidateCount: ranked.dropped,
+        scannedElementCount: 50,
+        intent: { operation: "click", strategy: "text", value: "Choice" },
+      },
+    });
+    const imported = importLocatorDiagnosisObservation(diagnosis, {
+      applicationAlias: "consumer-a",
+    });
+    assert.equal(imported.status, "imported");
+    const artifacts = createLocatorBlindReviewArtifacts(imported.observation);
+    assert.equal(artifacts.packet.candidates.length, 50);
+    assert.equal(new Set(artifacts.review.blindCandidateIds).size, 50);
+  });
+
+  await it("validates packet and mapping integrity", async () => {
+    const value = await observation();
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    assert.doesNotThrow(() =>
+      validateLocatorBlindReviewPacket(artifacts.packet, value),
+    );
+    assert.doesNotThrow(() =>
+      validateLocatorBlindCandidateMapping(
+        artifacts.mapping,
+        artifacts.packet,
+        value,
+      ),
+    );
+  });
+
+  await it("rejects a tampered private alias mapping", async () => {
+    const value = await observation();
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const tampered = {
+      ...artifacts.mapping,
+      aliases: artifacts.mapping.aliases.map((entry, index) =>
+        index === 0 ? { ...entry, originalCandidateId: "LOCATOR-999" } : entry,
+      ),
+    };
+    assert.throws(
+      () =>
+        validateLocatorBlindCandidateMapping(tampered, artifacts.packet, value),
+      /one-to-one inventory mapping/u,
+    );
+  });
+
+  await it("rejects a stale packet after the observation changes", async () => {
+    const value = await observation();
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const changed = reidentify({
+      ...structuredClone(value),
+      applicationAlias: "consumer-b",
+    });
+    assert.throws(
+      () => validateLocatorBlindReviewPacket(artifacts.packet, changed),
+      /does not link|stale/u,
+    );
+  });
+
+  await it("accepts a valid blind candidate review", async () => {
+    const artifacts = createLocatorBlindReviewArtifacts(await observation());
+    const result = inspectLocatorBlindReview(
+      completedBlindReview(artifacts),
+      artifacts.packet,
+    );
+    assert.equal(result.valid, true);
+  });
+
+  await it("accepts a valid pending zero-answer review", async () => {
+    const artifacts = createLocatorBlindReviewArtifacts(await observation());
+    assert.equal(
+      inspectLocatorBlindReview(artifacts.review, artifacts.packet).valid,
+      true,
+    );
+  });
+
+  await it("rejects unknown blind aliases", async () => {
+    const artifacts = createLocatorBlindReviewArtifacts(await observation());
+    const invalid = {
+      ...completedBlindReview(artifacts),
+      acceptableBlindCandidateIds: ["BLIND-CANDIDATE-999"],
+    };
+    const result = inspectLocatorBlindReview(invalid, artifacts.packet);
+    assert.equal(result.valid, false);
+    assert.match(JSON.stringify(result.issues), /CANDIDATE_UNKNOWN/u);
+  });
+
+  await it("rejects preferred candidates that are not acceptable", async () => {
+    const artifacts = createLocatorBlindReviewArtifacts(await observation());
+    const invalid = {
+      ...completedBlindReview(artifacts),
+      acceptableBlindCandidateIds: [],
+    };
+    assert.match(
+      JSON.stringify(
+        inspectLocatorBlindReview(invalid, artifacts.packet).issues,
+      ),
+      /PREFERRED_NOT_ACCEPTABLE/u,
+    );
+  });
+
+  await it("rejects acceptable and forbidden overlap", async () => {
+    const artifacts = createLocatorBlindReviewArtifacts(await observation());
+    const review = completedBlindReview(artifacts);
+    const invalid = {
+      ...review,
+      forbiddenBlindCandidateIds: [...review.acceptableBlindCandidateIds],
+    };
+    assert.match(
+      JSON.stringify(
+        inspectLocatorBlindReview(invalid, artifacts.packet).issues,
+      ),
+      /ACCEPTABLE_FORBIDDEN_OVERLAP/u,
+    );
+  });
+
+  await it("rejects unknown fields without weakening the schema", async () => {
+    const artifacts = createLocatorBlindReviewArtifacts(await observation());
+    const result = inspectLocatorBlindReview(
+      { ...artifacts.review, deterministicDiagnosis: "hidden answer" },
+      artifacts.packet,
+    );
+    assert.equal(result.valid, false);
+    assert.match(JSON.stringify(result.issues), /BLIND_REVIEW_UNKNOWN_FIELD/u);
+  });
+
+  await it("translates aliases back only after review validation", async () => {
+    const value = await observation();
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const translated = translateLocatorBlindReview(
+      value,
+      artifacts.packet,
+      artifacts.mapping,
+      completedBlindReview(artifacts),
+    );
+    assert.deepEqual(translated.preferredCandidateIds, ["LOCATOR-001"]);
+    assert.deepEqual(
+      [...translated.candidateIds].sort(),
+      value.candidateInventory.map(({ candidateId }) => candidateId).sort(),
+    );
+  });
+
+  await it("keeps blind templates free of expected answers", async () => {
+    const artifacts = createLocatorBlindReviewArtifacts(await observation());
+    assert.equal(artifacts.review.expectedClassification, null);
+    assert.equal(artifacts.review.expectedRecommendationStatus, null);
+    assert.deepEqual(artifacts.review.acceptableBlindCandidateIds, []);
+    assert.equal(artifacts.review.reviewerRationale, "");
+  });
+});
+
+await describe("blind holdout eligibility", async () => {
+  await it("separates calibration reviews from blind holdout reviews", async () => {
+    const value = await observation();
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const result = await runLocatorBlindHoldoutEvaluation(
+      [
+        {
+          observation: value,
+          packet: artifacts.packet,
+          mapping: artifacts.mapping,
+          review: completedBlindReview(artifacts),
+        },
+      ],
+      { calibrationPilotReviewed: 5 },
+    );
+    assert.equal(result.counts.calibrationPilotReviewed, 5);
+    assert.equal(result.counts.blindHoldoutReviewed, 1);
+    assert.equal(result.status, "insufficient-sample");
+  });
+
+  await it("reports pending reviews separately", async () => {
+    const value = await observation();
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const result = await runLocatorBlindHoldoutEvaluation([
+      {
+        observation: value,
+        packet: artifacts.packet,
+        mapping: artifacts.mapping,
+        review: artifacts.review,
+      },
+    ]);
+    assert.equal(result.counts.blindHoldoutReviewed, 0);
+    assert.equal(result.counts.pendingBlindReviews, 1);
+  });
+
+  await it("reports rejected reviews as ineligible", async () => {
+    const value = await observation();
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const result = await runLocatorBlindHoldoutEvaluation([
+      {
+        observation: value,
+        packet: artifacts.packet,
+        mapping: artifacts.mapping,
+        review: { ...artifacts.review, reviewStatus: "rejected" },
+      },
+    ]);
+    assert.equal(result.counts.ineligibleReviews, 1);
+  });
+
+  await it("uses no network and never applies a locator", async () => {
+    const result = await runLocatorBlindHoldoutEvaluation([]);
+    assert.deepEqual(result.safety, {
+      networkCalls: 0,
+      locatorApplications: 0,
+      automaticHealing: false,
+    });
+  });
+
+  await it("renders stable bounded Markdown with separate counts", async () => {
+    const result = await runLocatorBlindHoldoutEvaluation([], {
+      calibrationPilotReviewed: 5,
+    });
+    const markdown = renderLocatorBlindHoldoutMarkdown(result);
+    assert.match(markdown, /Pilot\/calibration reviewed: 5/u);
+    assert.match(markdown, /Blind holdout reviewed: 0/u);
+    assert.doesNotMatch(markdown, /<\w|```|C:\\Users|\/home\//u);
   });
 });
