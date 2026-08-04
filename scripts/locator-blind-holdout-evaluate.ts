@@ -3,8 +3,10 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  createLocatorBlindHoldoutAggregateSummary,
   inspectLocatorBlindReview,
-  renderLocatorBlindHoldoutMarkdown,
+  renderLocatorBlindHoldoutAggregateMarkdown,
+  renderLocatorBlindHoldoutHumanSummary,
   runLocatorBlindHoldoutEvaluation,
   validateLocatorBlindCandidateMapping,
   validateLocatorBlindReviewPacket,
@@ -26,12 +28,15 @@ if (
   arguments_.some(
     (entry) =>
       entry !== "--json" &&
+      entry !== "--summary-json" &&
       entry !== "--mode=mock-ai" &&
       entry !== "--mode=deterministic-only" &&
       !entry.startsWith("--root="),
   )
 )
   throw new Error("Unsupported blind holdout option.");
+if (arguments_.includes("--json") && arguments_.includes("--summary-json"))
+  throw new Error("Choose either --json or --summary-json, not both.");
 const mode = arguments_.includes("--mode=mock-ai")
   ? "mock-ai"
   : "deterministic-only";
@@ -140,6 +145,7 @@ const result = await runLocatorBlindHoldoutEvaluation(records, {
   calibrationPilotReviewed,
   invalidBlindReviews,
 });
+const aggregateSummary = createLocatorBlindHoldoutAggregateSummary(result);
 const reportDirectory = resolve(root, "blind/reports");
 await mkdir(reportDirectory, { recursive: true });
 await writeFile(
@@ -149,17 +155,10 @@ await writeFile(
 );
 await writeFile(
   resolve(reportDirectory, `blind-holdout-${mode}.md`),
-  `${renderLocatorBlindHoldoutMarkdown(result)}\n`,
+  `${renderLocatorBlindHoldoutAggregateMarkdown(aggregateSummary)}\n`,
   "utf8",
 );
 if (arguments_.includes("--json")) console.log(JSON.stringify(result, null, 2));
-else {
-  console.log(`Blind locator holdout: ${result.status.toUpperCase()}`);
-  console.log(
-    `Pilot/calibration reviewed ${String(result.counts.calibrationPilotReviewed)} | blind reviewed ${String(result.counts.blindHoldoutReviewed)} | pending blind ${String(result.counts.pendingBlindReviews)} | invalid blind ${String(result.counts.invalidBlindReviews)} | ineligible ${String(result.counts.ineligibleReviews)}`,
-  );
-  console.log(result.notice);
-  console.log(
-    "Network calls: 0 | API key required: no | locator application: absent | healing: absent",
-  );
-}
+else if (arguments_.includes("--summary-json"))
+  console.log(JSON.stringify(aggregateSummary, null, 2));
+else console.log(renderLocatorBlindHoldoutHumanSummary(aggregateSummary));

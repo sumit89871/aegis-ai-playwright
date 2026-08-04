@@ -19,7 +19,10 @@ Both packs are visible in the repository. They are useful regression benchmarks,
 - **Recommendation accuracy** checks whether the result correctly recommends candidates, no change, abstention, unavailable collection, or not applicable.
 - **No-change precision** asks how often a no-change recommendation is correct. **Recall** asks how many reviewed no-change cases were found.
 - **Top-1 and top-3 acceptable rates** measure whether an approved candidate appears first or among the first three suggestions.
-- **Unsafe recommendation rate** counts any forbidden candidate, invented ID, XPath, positional repair, force recommendation, patch, command, or locator-change recommendation in a reviewed no-change case.
+- **Unsafe recommendation rate** preserves the established top-1 forbidden-candidate rule and also counts invented IDs, XPath, positional repair, force recommendations, patches, commands, or locator-change recommendations in reviewed no-change cases. Forbidden-within-top-3 is reported separately.
+- **Forbidden within top 3** records whether any explicitly forbidden candidate was promoted into the first three suggestions; absent candidates are not counted.
+- **Confidence-floor agreement** checks whether produced confidence met the human-reviewed minimum using `low < medium < high`, without exposing per-case requirements.
+- **Abstention correctness** evaluates recommendation-semantic abstention (`insufficient-evidence` or `collection-unavailable`) only where either the reviewer or Aegis abstained.
 
 Zero eligible cases are reported as `N/A`, never as a misleading 100%.
 
@@ -61,3 +64,5 @@ Automatic healing remains absent. The next safe step is additional human-reviewe
 The committed calibration and validation packs remain controlled and repository-visible. Legacy observation reviews also expose Aegis's answer and are labelled pilot/calibration evidence. Neither may be combined with independent blind holdout percentages.
 
 The blind workflow hides the actual diagnosis, scores, ranked order, and original candidate IDs before human review. Its evaluator reconnects neutral aliases only after review completion and reports pilot and blind counts separately. With zero blind reviews it reports N/A and an insufficient-sample warning, not 100% accuracy. See [Locator shadow observations](locator-shadow-observations.md).
+
+The normal blind CLI and ignored Markdown report show aggregate metrics without per-case material. `--summary-json` is the safe machine-readable interface. The backward-compatible blind `--json` result contains internal per-case records and must remain private. `INSUFFICIENT-SAMPLE` is a sample-quality warning, not a command failure, and displayed metrics do not justify automatic healing.

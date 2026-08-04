@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   buildLocatorHoldoutAnalysisInput,
+  createLocatorBlindHoldoutAggregateSummary,
   createLocatorBlindReviewArtifacts,
   createLocatorObservationId,
   createLocatorObservationReviewTemplate,
@@ -15,6 +16,8 @@ import {
   mapRuntimeLocatorCandidateToObservationCandidate,
   rankLocatorCandidates,
   renderLocatorHoldoutMarkdown,
+  renderLocatorBlindHoldoutAggregateMarkdown,
+  renderLocatorBlindHoldoutHumanSummary,
   renderLocatorBlindHoldoutMarkdown,
   runLocatorBlindHoldoutEvaluation,
   runLocatorHoldoutEvaluation,
@@ -1542,6 +1545,109 @@ await describe("blind holdout eligibility", async () => {
     assert.equal(result.counts.calibrationPilotReviewed, 5);
     assert.equal(result.counts.blindHoldoutReviewed, 1);
     assert.equal(result.status, "insufficient-sample");
+    assert.equal(result.holdout.metrics.classification.accuracy.denominator, 1);
+  });
+
+  await it("builds an explicit aggregate-only summary", async () => {
+    const value = await observation({ sourceType: "real-shadow" });
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const result = await runLocatorBlindHoldoutEvaluation(
+      [
+        {
+          observation: value,
+          packet: artifacts.packet,
+          mapping: artifacts.mapping,
+          review: completedBlindReview(artifacts),
+        },
+      ],
+      { calibrationPilotReviewed: 5 },
+    );
+    const summary = createLocatorBlindHoldoutAggregateSummary({
+      ...result,
+      notice:
+        "LOC-OBS-PRIVATE BLIND-PACKET-PRIVATE reviewerRationale private failure text",
+    });
+    assert.deepEqual(Object.keys(summary).sort(), [
+      "counts",
+      "isolation",
+      "meaningful",
+      "metrics",
+      "mode",
+      "sampleNotice",
+      "schemaVersion",
+      "sourceTypeCounts",
+      "status",
+    ]);
+    assert.equal(summary.counts.calibrationPilotReviewed, 5);
+    assert.equal(summary.counts.blindHoldoutReviewed, 1);
+    assert.equal(summary.metrics.classification.agreement.denominator, 1);
+    assert.equal(summary.sourceTypeCounts["real-shadow"], 1);
+    assert.deepEqual(summary.isolation, {
+      networkCalls: 0,
+      apiKeyRequired: false,
+      locatorApplications: 0,
+      automaticHealing: false,
+    });
+    const serialized = JSON.stringify(summary);
+    assert.doesNotMatch(
+      serialized,
+      /LOC-OBS-|BLIND-PACKET-|BLIND-CANDIDATE-|LOCATOR-\d|observationId|packetId|mapping|reviewerRationale|errorMessage|deterministicScore|rankedCandidates|expectedClassification|actualClassification|C:\\Users|\/home\/|bearer\s+|authorization/iu,
+    );
+  });
+
+  await it("renders metrics and N/A for an insufficient sample", async () => {
+    const value = await candidateCountObservation(0);
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const result = await runLocatorBlindHoldoutEvaluation(
+      [
+        {
+          observation: value,
+          packet: artifacts.packet,
+          mapping: artifacts.mapping,
+          review: {
+            ...artifacts.review,
+            reviewStatus: "reviewed",
+            expectedClassification: "selector-no-match",
+            expectedRecommendationStatus: "insufficient-evidence",
+            minimumAcceptableConfidence: "low",
+            reviewerRationale:
+              "Independent review found insufficient candidate evidence.",
+          },
+        },
+      ],
+      { calibrationPilotReviewed: 5 },
+    );
+    const summary = createLocatorBlindHoldoutAggregateSummary(result);
+    const human = renderLocatorBlindHoldoutHumanSummary(summary);
+    const markdown = renderLocatorBlindHoldoutAggregateMarkdown(summary);
+    for (const output of [human, markdown]) {
+      assert.match(output, /INSUFFICIENT-SAMPLE/iu);
+      assert.match(output, /Classification agreement/iu);
+      assert.match(output, /N\/A \(0 eligible cases\)/u);
+      assert.match(output, /Pilot\/calibration/u);
+      assert.doesNotMatch(
+        output,
+        /LOC-OBS-|BLIND-PACKET-|BLIND-CANDIDATE-|LOCATOR-\d|observationId|packetId|mapping|reviewerRationale|errorMessage|C:\\Users|\/home\//iu,
+      );
+    }
+  });
+
+  await it("keeps mixed source counts aggregate-only", async () => {
+    const real = await observation({
+      applicationAlias: "consumer-real",
+      sourceType: "real-shadow",
+    });
+    const controlled = await observation({
+      applicationAlias: "consumer-controlled",
+      sourceType: "controlled-browser",
+    });
+    const result = await runLocatorHoldoutEvaluation(
+      [real, controlled],
+      [reviewed(real), reviewed(controlled)],
+    );
+    assert.equal(result.sourceCounts["real-shadow"], 1);
+    assert.equal(result.sourceCounts["controlled-browser"], 1);
+    assert.equal(result.reviewedObservationCount, 2);
   });
 
   await it("reports pending reviews separately", async () => {
@@ -1589,6 +1695,7 @@ await describe("blind holdout eligibility", async () => {
     const markdown = renderLocatorBlindHoldoutMarkdown(result);
     assert.match(markdown, /Pilot\/calibration reviewed: 5/u);
     assert.match(markdown, /Blind holdout reviewed: 0/u);
+    assert.match(markdown, /Classification agreement/u);
     assert.doesNotMatch(markdown, /<\w|```|C:\\Users|\/home\//u);
   });
 });

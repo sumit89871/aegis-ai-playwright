@@ -24,6 +24,7 @@ npm run ai:locator:observations:prepare-blind-review -- --id=LOC-OBS-...
 npm run ai:locator:observations:validate-blind-reviews
 npm run ai:locator:observations:validate-blind-reviews -- --json
 npm run ai:locator:holdout:evaluate:blind
+npm run ai:locator:holdout:evaluate:blind -- --summary-json
 ```
 
 The flow is:
@@ -71,6 +72,16 @@ npm run ai:locator:holdout:evaluate
 ```
 
 Their results must not be described as unbiased blind accuracy.
+
+## Privacy-safe blind metrics
+
+Eligible counts show that review isolation worked, but they do not measure whether Aegis agreed with the independent reviewer. The normal blind command therefore displays aggregate classification, recommendation, ranking, safety, confidence, and abstention metrics even when the status remains `INSUFFICIENT-SAMPLE`. The warning remains prominent because a small sample is directional evidence, not a production-accuracy estimate.
+
+Use `--summary-json` for a machine-readable allowlisted aggregate. It contains counts and rates only: no observation or packet IDs, candidate aliases or original IDs, mappings, per-case expected or actual answers, rankings, scores, rationales, or failure messages. The older `--json` option remains an internal backward-compatible full result with private per-case records; do not publish it. The ignored Markdown report contains the same safe aggregate view as the normal CLI.
+
+Top-1 and top-3 acceptable rates show whether a human-approved candidate was suggested first or within the first three ranks. Forbidden-at-top-1 and forbidden-within-top-3 measure unsafe promotion only when a forbidden candidate was actually returned. Confidence-floor agreement measures whether the produced confidence met the reviewer's minimum using `low < medium < high`, without exposing individual requirements. Abstention correctness evaluates `insufficient-evidence` and `collection-unavailable` decisions: appropriate abstentions, inappropriate abstentions, and cases where abstention was expected but another recommendation was returned. Zero eligible denominators are `N/A`, never `0%`.
+
+These deterministic metrics must be understood before an AI-reranking comparison. They never authorize locator application, replay, retries, source changes, or automatic healing.
 
 ## Limitations and safety
 

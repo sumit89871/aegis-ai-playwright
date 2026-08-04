@@ -233,6 +233,9 @@ npm run ai:locator:holdout:evaluate -- --json
 npm run ai:locator:observations:prepare-blind-review -- --id=<observation-id>
 npm run ai:locator:observations:validate-blind-reviews
 npm run ai:locator:holdout:evaluate:blind
+npm run ai:locator:holdout:evaluate:blind -- --summary-json
 ```
 
 Blind packets show neutral `BLIND-CANDIDATE-*` aliases in a reproducible order independent of Aegis ranking. The original-ID mapping is a separate private ignored artifact and is used only after review validation. Review validation reports actionable issues and never edits a review. See [Locator shadow observations](docs/locator-shadow-observations.md). Synthetic fixtures validate the workflow but are not production evidence; sample size alone does not authorize replay. Locator replay and self-healing remain absent.
+
+The blind evaluator prints privacy-safe aggregate quality metrics even while the sample is `INSUFFICIENT-SAMPLE`. `--summary-json` emits only an allowlisted aggregate DTO suitable for parsing or sharing. The older `--json` option remains backward compatible but is an internal full result containing private per-case details and must not be published. Counts prove workflow completion; classification, recommendation, candidate-ranking, abstention, confidence, and safety aggregates describe the deterministic baseline that must be understood before any AI-reranking comparison. No metric authorizes automatic healing.

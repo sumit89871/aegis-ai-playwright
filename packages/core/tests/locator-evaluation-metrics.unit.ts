@@ -58,6 +58,7 @@ function result(
     readonly preferred?: readonly string[];
     readonly forbidden?: readonly string[];
     readonly safety?: LocatorEvaluationCaseResult["safety"];
+    readonly minimumConfidence?: LocatorDiagnosisConclusion["confidence"];
   } = {},
 ): LocatorEvaluationCaseResult {
   return {
@@ -71,7 +72,7 @@ function result(
       preferredCandidateIds: options.preferred ?? [],
       forbiddenCandidateIds: options.forbidden ?? [],
       locatorChangeAllowed: options.locatorChangeAllowed ?? false,
-      minimumConfidence: "low",
+      minimumConfidence: options.minimumConfidence ?? "low",
     },
     actual,
     deterministic: actual,
@@ -150,12 +151,82 @@ await describe("locator evaluation metrics", async () => {
     assert.equal(metrics.recommendation.noChangeRecall.value, 1);
   });
 
+  await it("reports exact classification and recommendation mismatches", () => {
+    const correct = result(
+      "MATCH",
+      "selector-no-match",
+      "candidates-available",
+      conclusion("selector-no-match", "candidates-available", ["LOCATOR-001"]),
+      {
+        locatorChangeAllowed: true,
+        acceptable: ["LOCATOR-001"],
+      },
+    );
+    const mismatch = result(
+      "MISMATCH",
+      "selector-no-match",
+      "candidates-available",
+      conclusion("action-timeout", "no-change-recommended"),
+    );
+    const metrics = calculateLocatorEvaluationMetrics([correct, mismatch]);
+    assert.equal(metrics.classification.accuracy.value, 0.5);
+    assert.equal(metrics.recommendation.accuracy.value, 0.5);
+    assert.equal(metrics.recommendation.candidatesAvailableAccuracy.value, 0.5);
+  });
+
   await it("calculates top ranks, mean rank, and forbidden promotion", () => {
     const metrics = calculateLocatorEvaluationMetrics(sample);
     assert.equal(metrics.ranking.top1AcceptableRate.value, 0);
     assert.equal(metrics.ranking.top3AcceptableRate.value, 1);
     assert.equal(metrics.ranking.meanFirstAcceptableRank, 2);
     assert.equal(metrics.ranking.forbiddenCandidatePromotionRate.value, 1);
+    assert.equal(metrics.ranking.forbiddenCandidateTop3PromotionRate.value, 1);
+  });
+
+  await it("distinguishes forbidden top-1 from forbidden top-3 promotion", () => {
+    const metrics = calculateLocatorEvaluationMetrics([
+      result(
+        "TOP-THREE",
+        "selector-no-match",
+        "candidates-available",
+        conclusion("selector-no-match", "candidates-available", [
+          "LOCATOR-001",
+          "LOCATOR-002",
+          "LOCATOR-003",
+        ]),
+        {
+          locatorChangeAllowed: true,
+          acceptable: ["LOCATOR-001"],
+          preferred: ["LOCATOR-001"],
+          forbidden: ["LOCATOR-002"],
+        },
+      ),
+    ]);
+    assert.equal(metrics.ranking.top1AcceptableRate.value, 1);
+    assert.equal(metrics.ranking.top3AcceptableRate.value, 1);
+    assert.equal(metrics.ranking.forbiddenCandidatePromotionRate.value, 0);
+    assert.equal(metrics.ranking.forbiddenCandidateTop3PromotionRate.value, 1);
+  });
+
+  await it("counts a zero-candidate result with no acceptable candidate", () => {
+    const metrics = calculateLocatorEvaluationMetrics([
+      result(
+        "NO-CANDIDATE",
+        "selector-no-match",
+        "candidates-available",
+        conclusion("selector-no-match", "insufficient-evidence"),
+        {
+          locatorChangeAllowed: true,
+          acceptable: ["LOCATOR-001"],
+          preferred: ["LOCATOR-001"],
+        },
+      ),
+    ]);
+    assert.equal(metrics.ranking.top1AcceptableRate.value, 0);
+    assert.equal(metrics.ranking.top3AcceptableRate.value, 0);
+    assert.equal(metrics.ranking.noAcceptableCandidateReturned, 1);
+    assert.equal(metrics.ranking.forbiddenCandidatePromotionRate.value, 0);
+    assert.equal(metrics.ranking.forbiddenCandidateTop3PromotionRate.value, 0);
   });
 
   await it("calculates safety and confidence metrics", () => {
@@ -172,6 +243,69 @@ await describe("locator evaluation metrics", async () => {
     assert.equal(metrics.confidence.highConfidenceIncorrect, 2);
   });
 
+  await it("measures confidence-floor agreement without exposing requirements", () => {
+    const passing = result(
+      "CONFIDENCE-PASS",
+      "element-not-enabled",
+      "no-change-recommended",
+      conclusion("element-not-enabled", "no-change-recommended", [], "high"),
+      { minimumConfidence: "medium" },
+    );
+    const failing = result(
+      "CONFIDENCE-FAIL",
+      "element-not-enabled",
+      "no-change-recommended",
+      conclusion("element-not-enabled", "no-change-recommended", [], "low"),
+      { minimumConfidence: "high" },
+    );
+    assert.deepEqual(
+      calculateLocatorEvaluationMetrics([passing, failing]).confidence
+        .floorAgreement,
+      { numerator: 1, denominator: 2, value: 0.5 },
+    );
+    assert.equal(
+      calculateLocatorEvaluationMetrics([]).confidence.floorAgreement.value,
+      null,
+    );
+  });
+
+  await it("measures abstention correctness from recommendation semantics", () => {
+    const appropriate = result(
+      "ABSTAIN-CORRECT",
+      "unknown-locator-failure",
+      "insufficient-evidence",
+      conclusion("unknown-locator-failure", "insufficient-evidence"),
+    );
+    const inappropriate = result(
+      "ABSTAIN-INCORRECT",
+      "selector-no-match",
+      "candidates-available",
+      conclusion("unknown-locator-failure", "collection-unavailable"),
+    );
+    const recommendationInstead = result(
+      "ABSTAIN-MISSED",
+      "unknown-locator-failure",
+      "collection-unavailable",
+      conclusion("selector-no-match", "candidates-available"),
+    );
+    const metrics = calculateLocatorEvaluationMetrics([
+      appropriate,
+      inappropriate,
+      recommendationInstead,
+    ]);
+    assert.deepEqual(metrics.abstention, {
+      appropriateCount: 1,
+      inappropriateCount: 1,
+      expectedButRecommendationMadeCount: 1,
+      opportunityCount: 3,
+      correctness: { numerator: 1, denominator: 3, value: 1 / 3 },
+    });
+    assert.equal(
+      metrics.recommendation.collectionUnavailableAccuracy.denominator,
+      1,
+    );
+  });
+
   await it("treats a forbidden top rank as unsafe and high-confidence incorrect", () => {
     const metrics = calculateLocatorEvaluationMetrics([sample[0]]);
     assert.equal(metrics.safety.unsafeRecommendationRate.value, 1);
@@ -182,6 +316,7 @@ await describe("locator evaluation metrics", async () => {
     const metrics = calculateLocatorEvaluationMetrics([sample[1]]);
     assert.equal(metrics.ranking.top1AcceptableRate.value, null);
     assert.equal(metrics.ranking.top1AcceptableRate.denominator, 0);
+    assert.equal(metrics.abstention.correctness.value, null);
   });
 
   await it("orders equivalent metric input deterministically", () => {

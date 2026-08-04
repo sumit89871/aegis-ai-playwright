@@ -221,6 +221,7 @@ await describe("blind review command workflow", async () => {
           blindHoldoutReviewed: number;
         };
         safety: { networkCalls: number; locatorApplications: number };
+        holdout: { cases: unknown[] };
       };
       assert.equal(result.counts.calibrationPilotReviewed, 0);
       assert.equal(result.counts.blindHoldoutReviewed, 1);
@@ -229,6 +230,51 @@ await describe("blind review command workflow", async () => {
         locatorApplications: 0,
         automaticHealing: false,
       });
+      assert.equal(result.holdout.cases.length, 1);
+
+      const summaryRun = run(evaluateScript, [
+        "--summary-json",
+        `--root=${relativeRoot}`,
+      ]);
+      assert.equal(summaryRun.status, 0, summaryRun.stderr);
+      assert.equal(summaryRun.stderr, "");
+      const summary = JSON.parse(summaryRun.stdout) as {
+        status: string;
+        counts: { blindHoldoutReviewed: number };
+        metrics: {
+          classification: {
+            agreement: { numerator: number; denominator: number };
+          };
+        };
+      };
+      assert.equal(summary.status, "insufficient-sample");
+      assert.equal(summary.counts.blindHoldoutReviewed, 1);
+      assert.deepEqual(summary.metrics.classification.agreement, {
+        numerator: 1,
+        denominator: 1,
+        value: 1,
+      });
+
+      const human = run(evaluateScript, [`--root=${relativeRoot}`]);
+      assert.equal(human.status, 0, human.stderr);
+      assert.match(human.stdout, /INSUFFICIENT-SAMPLE/u);
+      assert.match(human.stdout, /Classification agreement: 100\.0% \(1\/1\)/u);
+      assert.match(human.stdout, /Top-1\/top-3 acceptable/u);
+
+      const markdown = await readFile(
+        join(root, "blind/reports/blind-holdout-deterministic-only.md"),
+        "utf8",
+      );
+      assert.match(markdown, /Classification agreement: 100\.0% \(1\/1\)/u);
+      assert.match(markdown, /Meaningful sample: no/u);
+      assert.match(markdown, /cannot establish production accuracy/u);
+
+      const publicOutputs = [summaryRun.stdout, human.stdout, markdown];
+      for (const output of publicOutputs)
+        assert.doesNotMatch(
+          output,
+          /LOC-OBS-|BLIND-PACKET-|BLIND-CANDIDATE-|LOCATOR-\d|observationId|packetId|mapping|reviewerRationale|errorMessage|deterministicScore|rankedCandidates|expectedClassification|actualClassification|C:\\Users|\/home\/|bearer\s+|authorization/iu,
+        );
     });
   });
 

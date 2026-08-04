@@ -34,6 +34,7 @@ export interface LocatorEvaluationMetrics {
     readonly noChangeRecall: EvaluationRate;
     readonly notApplicableAccuracy: EvaluationRate;
     readonly insufficientEvidenceAccuracy: EvaluationRate;
+    readonly collectionUnavailableAccuracy: EvaluationRate;
   };
   readonly ranking: {
     readonly top1AcceptableRate: EvaluationRate;
@@ -42,6 +43,7 @@ export interface LocatorEvaluationMetrics {
     readonly meanFirstAcceptableRank: number | null;
     readonly noAcceptableCandidateReturned: number;
     readonly forbiddenCandidatePromotionRate: EvaluationRate;
+    readonly forbiddenCandidateTop3PromotionRate: EvaluationRate;
   };
   readonly safety: {
     readonly inventedCandidateCount: number;
@@ -61,6 +63,14 @@ export interface LocatorEvaluationMetrics {
     readonly accuracyByLevel: Readonly<
       Record<"high" | "medium" | "low", EvaluationRate>
     >;
+    readonly floorAgreement: EvaluationRate;
+  };
+  readonly abstention: {
+    readonly appropriateCount: number;
+    readonly inappropriateCount: number;
+    readonly expectedButRecommendationMadeCount: number;
+    readonly opportunityCount: number;
+    readonly correctness: EvaluationRate;
   };
 }
 
@@ -94,6 +104,21 @@ function resultIsCorrect(entry: LocatorEvaluationCaseResult): boolean {
     (!entry.expected.locatorChangeAllowed ||
       (topCandidateId !== undefined &&
         entry.expected.acceptableCandidateIds.includes(topCandidateId)))
+  );
+}
+
+const ABSTENTION_RECOMMENDATION_STATUSES = Object.freeze([
+  "insufficient-evidence",
+  "collection-unavailable",
+] as const);
+const CONFIDENCE_ORDER = Object.freeze({ low: 0, medium: 1, high: 2 });
+
+function isAbstentionStatus(value: string | undefined): boolean {
+  return (
+    value !== undefined &&
+    ABSTENTION_RECOMMENDATION_STATUSES.includes(
+      value as (typeof ABSTENTION_RECOMMENDATION_STATUSES)[number],
+    )
   );
 }
 
@@ -188,6 +213,13 @@ export function calculateLocatorEvaluationMetrics(
       id !== undefined && entry.expected.forbiddenCandidateIds.includes(id)
     );
   }).length;
+  const forbiddenTop3Promotions = rankingEligible.filter((entry) =>
+    entry.actual?.rankedCandidates
+      .filter(({ rank }) => rank <= 3)
+      .some(({ candidateId }) =>
+        entry.expected.forbiddenCandidateIds.includes(candidateId),
+      ),
+  ).length;
   const unsafeCases = results.filter(
     (entry) =>
       Object.values(entry.safety).some((count) => count > 0) ||
@@ -225,6 +257,31 @@ export function calculateLocatorEvaluationMetrics(
   const highIncorrect = results.filter(
     (entry) => entry.actual?.confidence === "high" && !resultIsCorrect(entry),
   ).length;
+  const confidenceFloorPass = results.filter(
+    (entry) =>
+      entry.actual !== null &&
+      CONFIDENCE_ORDER[entry.actual.confidence] >=
+        CONFIDENCE_ORDER[entry.expected.minimumConfidence],
+  ).length;
+  const expectedAbstention = (entry: LocatorEvaluationCaseResult): boolean =>
+    isAbstentionStatus(entry.expected.recommendationStatus);
+  const actualAbstention = (entry: LocatorEvaluationCaseResult): boolean =>
+    isAbstentionStatus(entry.actual?.recommendationStatus);
+  const abstentionOpportunities = results.filter(
+    (entry) => expectedAbstention(entry) || actualAbstention(entry),
+  );
+  const appropriateAbstentions = abstentionOpportunities.filter(
+    (entry) => expectedAbstention(entry) && actualAbstention(entry),
+  ).length;
+  const inappropriateAbstentions = abstentionOpportunities.filter(
+    (entry) => !expectedAbstention(entry) && actualAbstention(entry),
+  ).length;
+  const expectedButRecommendationMade = abstentionOpportunities.filter(
+    (entry) =>
+      expectedAbstention(entry) &&
+      entry.actual !== null &&
+      !actualAbstention(entry),
+  ).length;
   const safetyTotal = (
     field: keyof LocatorEvaluationCaseResult["safety"],
   ): number => results.reduce((total, entry) => total + entry.safety[field], 0);
@@ -256,6 +313,10 @@ export function calculateLocatorEvaluationMetrics(
         results,
         "insufficient-evidence",
       ),
+      collectionUnavailableAccuracy: accuracyForExpected(
+        results,
+        "collection-unavailable",
+      ),
     }),
     ranking: Object.freeze({
       top1AcceptableRate: rate(top1, rankingEligible.length),
@@ -272,6 +333,10 @@ export function calculateLocatorEvaluationMetrics(
         rankingEligible.length - firstAcceptableRanks.length,
       forbiddenCandidatePromotionRate: rate(
         forbiddenPromotions,
+        rankingEligible.length,
+      ),
+      forbiddenCandidateTop3PromotionRate: rate(
+        forbiddenTop3Promotions,
         rankingEligible.length,
       ),
     }),
@@ -299,6 +364,14 @@ export function calculateLocatorEvaluationMetrics(
       highConfidenceIncorrect: highIncorrect,
       distribution: Object.freeze(confidenceDistribution),
       accuracyByLevel: Object.freeze(confidenceAccuracy),
+      floorAgreement: rate(confidenceFloorPass, results.length),
+    }),
+    abstention: Object.freeze({
+      appropriateCount: appropriateAbstentions,
+      inappropriateCount: inappropriateAbstentions,
+      expectedButRecommendationMadeCount: expectedButRecommendationMade,
+      opportunityCount: abstentionOpportunities.length,
+      correctness: rate(appropriateAbstentions, abstentionOpportunities.length),
     }),
   });
 }
