@@ -32,6 +32,10 @@ const evaluateScript = resolve(
   repositoryRoot,
   "scripts/locator-blind-holdout-evaluate.ts",
 );
+const progressDemoScript = resolve(
+  repositoryRoot,
+  "scripts/cli-progress-demo.ts",
+);
 
 async function fixtureObservation(
   candidateCount = 2,
@@ -134,6 +138,23 @@ async function withFixture(
 }
 
 await describe("blind review command workflow", async () => {
+  await it("runs the isolated progress demonstration with clean redirected output", () => {
+    for (const option of ["--plain", "--no-animation"]) {
+      const result = run(progressDemoScript, [option]);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stderr, "");
+      assert.match(result.stdout, /CLI PROGRESS DEMONSTRATION/iu);
+      assert.match(result.stdout, /progress cleanup complete/iu);
+      assert.match(result.stdout, /Network calls:\s+0/iu);
+      assert.match(result.stdout, /User artifacts:\s+not accessed/iu);
+      assert.equal(result.stdout.includes("\u001B"), false);
+      assert.doesNotMatch(
+        result.stdout,
+        /LOC-OBS-|BLIND-PACKET-|BLIND-CANDIDATE-|LOCATOR-|mapping|authorization|C:\\Users|\/home\//iu,
+      );
+    }
+  });
+
   await it("prepares a packet, private mapping, and blank review without leaking rank", async () => {
     await withFixture(async ({ root, relativeRoot }) => {
       const result = run(prepareScript, [`--root=${relativeRoot}`]);

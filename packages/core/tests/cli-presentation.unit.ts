@@ -2,13 +2,19 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  CLI_MAXIMUM_RENDER_WIDTH,
+  CLI_MINIMUM_BORDERED_WIDTH,
+  CLI_PROGRESS_DELAY_MS,
   createCliProgressReporter,
   createLocatorBlindHoldoutAggregateSummary,
   detectTerminalCapabilities,
   renderCliError,
+  renderCliNotice,
+  renderCliSection,
   renderLocatorBlindHoldoutTerminal,
   runLocatorBlindHoldoutEvaluation,
   stripAnsi,
+  usesBorderedCliLayout,
   wrapCliText,
 } from "../src/index.ts";
 import type {
@@ -122,6 +128,23 @@ await describe("terminal capability detection", async () => {
     assert.equal(result.unicode, true);
   });
 
+  await it("selects responsive layouts consistently on Windows Terminal", () => {
+    for (const columns of [80, 100, 120, 160]) {
+      const result = capabilities({
+        columns,
+        platform: "win32",
+        environment: { WT_SESSION: "test-session" },
+      });
+      assert.equal(result.rich, true);
+      assert.equal(usesBorderedCliLayout(result), true);
+      assert.equal(result.width, Math.min(columns, CLI_MAXIMUM_RENDER_WIDTH));
+    }
+    assert.equal(CLI_MINIMUM_BORDERED_WIDTH, 80);
+    assert.equal(usesBorderedCliLayout(capabilities({ columns: 79 })), false);
+    assert.equal(capabilities({ columns: 79 }).rich, true);
+    assert.equal(capabilities({ columns: 71 }).outputMode, "plain");
+  });
+
   await it("uses plain output for CI, dumb, redirected, narrow, or explicit plain modes", () => {
     for (const result of [
       capabilities({ environment: { CI: "true" } }),
@@ -169,7 +192,7 @@ await describe("terminal capability detection", async () => {
 });
 
 await describe("terminal rendering", async () => {
-  await it("renders grouped rich output at 120 and 80 columns", async () => {
+  await it("renders bordered rich output at 80, 100, 120, and 160 columns", async () => {
     const base = await emptySummary();
     const summary: LocatorBlindHoldoutAggregateSummary = {
       ...base,
@@ -178,12 +201,13 @@ await describe("terminal rendering", async () => {
       sampleNotice:
         "One independently reviewed blind case is useful directional evidence, not production proof.",
     };
-    for (const width of [120, 80]) {
-      const output = renderLocatorBlindHoldoutTerminal(
-        summary,
-        capabilities({ columns: width }),
-        1250,
-      );
+    for (const columns of [80, 100, 120, 160]) {
+      const terminal = capabilities({
+        columns,
+        platform: "win32",
+        environment: { WT_SESSION: "test-session" },
+      });
+      const output = renderLocatorBlindHoldoutTerminal(summary, terminal, 1250);
       for (const section of [
         "RUN STATUS",
         "REVIEW ELIGIBILITY",
@@ -199,12 +223,65 @@ await describe("terminal rendering", async () => {
       assert.match(output, /INSUFFICIENT-SAMPLE/u);
       assert.match(output, /N\/A \(0 eligible cases\)/u);
       assert.match(output, /Elapsed time.*1\.25s/u);
+      assert.match(stripAnsi(output), /┌ RUN STATUS ─+/u);
+      assert.match(stripAnsi(output), /│.*Sample status:/u);
       assert.ok(
         stripAnsi(output)
           .split("\n")
-          .every((line) => line.length <= width),
+          .every((line) => line.length <= terminal.width),
       );
     }
+  });
+
+  await it("uses compact rich sections only below the bordered threshold", async () => {
+    const terminal = capabilities({ columns: 79 });
+    const output = renderLocatorBlindHoldoutTerminal(
+      await emptySummary(),
+      terminal,
+      10,
+    );
+    assert.equal(terminal.outputMode, "rich");
+    assert.equal(usesBorderedCliLayout(terminal), false);
+    assert.match(stripAnsi(output), /◆ RUN STATUS/u);
+    assert.doesNotMatch(stripAnsi(output), /┌ RUN STATUS/u);
+  });
+
+  await it("aligns values per section and wraps labels without excessive gaps", () => {
+    const terminal = capabilities({ columns: 80 });
+    const output = stripAnsi(
+      renderCliSection(
+        "Alignment",
+        [
+          { label: "Short", value: "alpha" },
+          { label: "Longer label", value: "beta" },
+          {
+            label: "An intentionally oversized label that must wrap",
+            value: "gamma",
+          },
+        ],
+        terminal,
+      ),
+    );
+    const alpha = output.split("\n").find((line) => line.includes("alpha"));
+    const beta = output.split("\n").find((line) => line.includes("beta"));
+    assert.ok(alpha !== undefined && beta !== undefined);
+    assert.equal(alpha.indexOf("alpha"), beta.indexOf("beta"));
+    assert.ok(output.split("\n").every((line) => line.length <= 80));
+    assert.match(output, /intentionally oversized label/u);
+  });
+
+  await it("indents wrapped notices without repeating their semantic marker", () => {
+    const output = stripAnsi(
+      renderCliNotice(
+        "RISK",
+        "One or more aggregate safety signals require investigation before another advisory experiment is considered, while locator application remains absent.",
+        capabilities({ columns: 80 }),
+      ),
+    );
+    assert.equal(output.match(/\[RISK\]/gu)?.length, 1);
+    const lines = output.split("\n");
+    assert.ok(lines.length > 1);
+    assert.ok(lines.slice(1).every((line) => line.startsWith("       ")));
   });
 
   await it("renders plain ASCII output without terminal control sequences", async () => {
@@ -342,25 +419,25 @@ await describe("delayed CLI progress", async () => {
       },
       stream: { isTTY: true, write: (value) => writes.push(value) },
       scheduler,
-      delayMs: 300,
       intervalMs: 80,
     });
     return { scheduler, writes, reporter };
   }
 
-  await it("avoids flicker when work succeeds before the delay", () => {
+  await it("avoids flicker for a 0.39-second operation", () => {
     const { scheduler, writes, reporter } = fixture();
     reporter.start("Loading records");
-    scheduler.advance(299);
+    scheduler.advance(390);
     reporter.succeed();
     scheduler.advance(1000);
     assert.deepEqual(writes, []);
+    assert.equal(CLI_PROGRESS_DELAY_MS, 400);
   });
 
   await it("animates on stderr-compatible streams and restores the cursor", () => {
     const { scheduler, writes, reporter } = fixture();
     reporter.start("Loading records");
-    scheduler.advance(300);
+    scheduler.advance(CLI_PROGRESS_DELAY_MS);
     reporter.update("Validating records");
     scheduler.advance(80);
     reporter.succeed();
@@ -375,7 +452,7 @@ await describe("delayed CLI progress", async () => {
     for (const method of ["fail", "interrupt"] as const) {
       const { scheduler, writes, reporter } = fixture();
       reporter.start("Evaluating");
-      scheduler.advance(300);
+      scheduler.advance(CLI_PROGRESS_DELAY_MS);
       if (method === "fail") reporter.fail();
       else reporter.interrupt();
       const output = writes.join("");
@@ -388,7 +465,7 @@ await describe("delayed CLI progress", async () => {
   await it("uses static progress without cursor control for no-animation", () => {
     const { scheduler, writes, reporter } = fixture(false);
     reporter.start("Loading records");
-    scheduler.advance(300);
+    scheduler.advance(CLI_PROGRESS_DELAY_MS);
     reporter.update("Writing reports");
     reporter.succeed();
     const output = writes.join("");

@@ -87,17 +87,18 @@ These deterministic metrics must be understood before an AI-reranking comparison
 
 ## Terminal output modes
 
-The normal command chooses rich output only when stdout is an interactive terminal, CI is absent, `TERM` is not `dumb`, and the terminal is wide enough. Rich output groups status, eligibility, diagnosis, recommendation, ranking, safety, confidence, abstention, isolation, interpretation, and elapsed time. Labels accompany every color and symbol so color is never the only signal.
+The normal command chooses rich output only when stdout is an interactive terminal, CI is absent, `TERM` is not `dumb`, and the terminal is at least 72 columns wide. Terminals at 80 columns and above receive bordered panels; 72–79 columns receive compact rich headings. Narrower terminals use plain output. Rendering is capped at 140 columns so a very wide terminal remains easy to scan. Rich output groups status, eligibility, diagnosis, recommendation, ranking, safety, confidence, abstention, isolation, interpretation, and elapsed time. Each section calculates one label width, and wrapped values align beneath their value rather than repeating labels or status markers. Labels accompany every color and symbol so color is never the only signal.
 
-Progress is delayed for 300 ms to avoid flicker and names only work the command is actually performing: loading records, counting pilot reviews, validating packet/mapping integrity, translating aliases and evaluating, calculating the safe aggregate, and writing reports. Animation is transient stderr output; metrics remain stdout output. Ctrl+C, failure, and normal completion restore the cursor. CI, pipes, JSON, and plain mode never animate.
+Progress is delayed for 400 ms to avoid flicker and names only work the command is actually performing: loading records, counting pilot reviews, validating packet/mapping integrity, translating aliases and evaluating, calculating the safe aggregate, and writing reports. A command that finishes before the delay produces no progress output. Animation is transient stderr output; metrics remain stdout output. Ctrl+C, failure, and normal completion restore the cursor. CI, pipes, JSON, and plain mode never animate.
 
 ```text
 ┌ AegisAI · Blind Locator Holdout ───────────────────────────┐
 └────────────────────────────────────────────────────────────┘
 
-◆ RUN STATUS
-  Mode:          deterministic-only
-  Sample status: INSUFFICIENT-SAMPLE
+┌ RUN STATUS ────────────────────────────────────────────────────┐
+│  Mode:          deterministic-only                             │
+│  Sample status: INSUFFICIENT-SAMPLE                            │
+└────────────────────────────────────────────────────────────────┘
 
 [WARNING] The reviewed sample is directional evidence, not production proof.
 ```
@@ -113,6 +114,16 @@ RUN STATUS
 ```
 
 `--no-animation` keeps rich static formatting on a capable interactive terminal but disables cursor animation. `NO_COLOR` disables color, `FORCE_COLOR=0` explicitly disables it, and legacy Windows terminals receive an ASCII fallback. Narrow terminals, `TERM=dumb`, redirected output, and CI automatically use plain mode. Screen readers can rely on headings and explicit `[WARNING]`, `[RISK]`, `[SUCCESS]`, and `[INFO]` labels rather than symbols.
+
+To inspect progress behavior without reading observations, running business evaluation, or contacting a network service, use:
+
+```powershell
+npm run cli:demo:progress
+npm run cli:demo:progress -- --no-animation
+npm run cli:demo:progress -- --plain
+```
+
+The demo has deterministic stages and exists only for explicit local presentation testing; CI does not invoke it.
 
 Machine consumers should use `--summary-json`. It emits valid aggregate JSON only, with no banner, spinner, ANSI, Markdown, or trailing prose. The backward-compatible `--json` mode is also pure JSON, but contains private per-case records and must not be published. Expected command-option errors render as bounded structured blocks without stack traces; commands never repair review data automatically.
 

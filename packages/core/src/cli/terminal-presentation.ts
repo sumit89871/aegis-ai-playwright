@@ -28,9 +28,10 @@ export interface CliKeyValueRow {
   readonly status?: "neutral" | "success" | "warning" | "danger";
 }
 
-const MINIMUM_WIDTH = 40;
-const MAXIMUM_WIDTH = 120;
-const MINIMUM_RICH_WIDTH = 72;
+export const CLI_MINIMUM_WIDTH = 40;
+export const CLI_MAXIMUM_RENDER_WIDTH = 140;
+export const CLI_MINIMUM_RICH_WIDTH = 72;
+export const CLI_MINIMUM_BORDERED_WIDTH = 80;
 const ANSI = Object.freeze({
   reset: "\u001B[0m",
   cyan: "\u001B[36m",
@@ -45,7 +46,10 @@ function environmentFlag(value: string | undefined): boolean {
 
 function boundedWidth(columns: number | undefined): number {
   if (columns === undefined || !Number.isFinite(columns)) return 100;
-  return Math.max(MINIMUM_WIDTH, Math.min(MAXIMUM_WIDTH, Math.floor(columns)));
+  return Math.max(
+    CLI_MINIMUM_WIDTH,
+    Math.min(CLI_MAXIMUM_RENDER_WIDTH, Math.floor(columns)),
+  );
 }
 
 export function detectTerminalCapabilities(
@@ -67,7 +71,7 @@ export function detectTerminalCapabilities(
     stdoutIsTty &&
     !ci &&
     !dumb &&
-    width >= MINIMUM_RICH_WIDTH;
+    width >= CLI_MINIMUM_RICH_WIDTH;
   const noColor = environment.NO_COLOR !== undefined;
   const forceColorDisabled = environment.FORCE_COLOR === "0";
   const modernWindows =
@@ -126,35 +130,100 @@ export function wrapCliText(
   value: string,
   width: number,
   indent = "",
+  continuationIndent = indent,
 ): readonly string[] {
   const normalized = value.replace(/\s+/gu, " ").trim();
   if (normalized === "") return [indent];
-  const available = Math.max(10, width - indent.length);
   const lines: string[] = [];
   let line = "";
+  let firstLine = true;
+  const prefix = (): string => (firstLine ? indent : continuationIndent);
+  const available = (): number => Math.max(10, width - prefix().length);
+  const emit = (): void => {
+    lines.push(`${prefix()}${line}`);
+    line = "";
+    firstLine = false;
+  };
   for (const originalWord of normalized.split(" ")) {
     let word = originalWord;
-    if (word.length > available) {
+    if (word.length > available()) {
       if (line !== "") {
-        lines.push(`${indent}${line}`);
-        line = "";
+        emit();
       }
-      while (word.length > available) {
-        lines.push(`${indent}${word.slice(0, available)}`);
-        word = word.slice(available);
+      while (word.length > available()) {
+        line = word.slice(0, available());
+        word = word.slice(available());
+        emit();
       }
     }
     if (word === "") continue;
     if (line === "") line = word;
-    else if (line.length + word.length + 1 <= available)
+    else if (line.length + word.length + 1 <= available())
       line = `${line} ${word}`;
     else {
-      lines.push(`${indent}${line}`);
+      emit();
       line = word;
     }
   }
-  if (line !== "") lines.push(`${indent}${line}`);
+  if (line !== "") emit();
   return lines;
+}
+
+export function usesBorderedCliLayout(
+  capabilities: TerminalCapabilities,
+): boolean {
+  return capabilities.rich && capabilities.width >= CLI_MINIMUM_BORDERED_WIDTH;
+}
+
+function visibleLength(value: string): number {
+  return stripAnsi(value).length;
+}
+
+function padVisibleEnd(value: string, width: number): string {
+  return `${value}${" ".repeat(Math.max(0, width - visibleLength(value)))}`;
+}
+
+function sectionLabelWidth(
+  rows: readonly CliKeyValueRow[],
+  contentWidth: number,
+): number {
+  const longest = Math.max(12, ...rows.map(({ label }) => label.length));
+  return Math.min(longest, 32, Math.max(12, Math.floor(contentWidth * 0.42)));
+}
+
+function renderSectionRows(
+  rows: readonly CliKeyValueRow[],
+  capabilities: TerminalCapabilities,
+  contentWidth: number,
+): readonly string[] {
+  const labelWidth = sectionLabelWidth(rows, contentWidth);
+  return rows.flatMap((row) => {
+    const labelText = `${row.label}:`;
+    if (labelText.length > labelWidth + 1) {
+      const labelLines = wrapCliText(labelText, contentWidth);
+      const valueLines = wrapCliText(row.value, contentWidth, "  ", "  ");
+      return [
+        ...labelLines,
+        ...valueLines.map((line, index) =>
+          index === 0
+            ? colorize(line, row.status ?? "neutral", capabilities)
+            : line,
+        ),
+      ];
+    }
+    const firstPrefix = `${labelText.padEnd(labelWidth + 1)} `;
+    const continuationPrefix = " ".repeat(firstPrefix.length);
+    return wrapCliText(
+      row.value,
+      contentWidth,
+      firstPrefix,
+      continuationPrefix,
+    ).map((line, index) =>
+      index === 0
+        ? colorize(line, row.status ?? "neutral", capabilities)
+        : line,
+    );
+  });
 }
 
 export function renderCliBanner(
@@ -180,6 +249,30 @@ export function renderCliSection(
   rows: readonly CliKeyValueRow[],
   capabilities: TerminalCapabilities,
 ): string {
+  if (usesBorderedCliLayout(capabilities)) {
+    const horizontal = capabilities.unicode ? "─" : "-";
+    const topLeft = capabilities.unicode ? "┌" : "+";
+    const topRight = capabilities.unicode ? "┐" : "+";
+    const bottomLeft = capabilities.unicode ? "└" : "+";
+    const bottomRight = capabilities.unicode ? "┘" : "+";
+    const vertical = capabilities.unicode ? "│" : "|";
+    const innerWidth = capabilities.width - 2;
+    const contentWidth = innerWidth - 4;
+    const titleText = ` ${title.toUpperCase()} `;
+    const top = `${topLeft}${titleText}${horizontal.repeat(
+      Math.max(0, innerWidth - titleText.length),
+    )}${topRight}`;
+    const body = renderSectionRows(rows, capabilities, contentWidth).map(
+      (line) =>
+        `${vertical}  ${padVisibleEnd(line, contentWidth)}  ${vertical}`,
+    );
+    const bottom = `${bottomLeft}${horizontal.repeat(innerWidth)}${bottomRight}`;
+    return [
+      colorize(top, "neutral", capabilities),
+      ...body,
+      colorize(bottom, "neutral", capabilities),
+    ].join("\n");
+  }
   const heading = capabilities.rich
     ? colorize(
         `${capabilities.unicode ? "◆" : ">"} ${title.toUpperCase()}`,
@@ -187,21 +280,11 @@ export function renderCliSection(
         capabilities,
       )
     : title.toUpperCase();
-  const labelWidth = Math.min(
-    32,
-    Math.max(12, Math.floor(capabilities.width * 0.4)),
-    Math.max(12, ...rows.map(({ label }) => label.length)),
+  const contentIndent = capabilities.rich ? "  " : "";
+  const contentWidth = capabilities.width - contentIndent.length;
+  const rowLines = renderSectionRows(rows, capabilities, contentWidth).map(
+    (line) => `${contentIndent}${line}`,
   );
-  const rowLines = rows.flatMap((row) => {
-    const label = `${row.label}:`.padEnd(labelWidth + 1);
-    const prefix = `  ${label} `;
-    const wrapped = wrapCliText(row.value, capabilities.width, prefix);
-    return wrapped.map((line, index) =>
-      index === 0
-        ? colorize(line, row.status ?? "neutral", capabilities)
-        : line,
-    );
-  });
   return [heading, ...rowLines].join("\n");
 }
 
@@ -220,7 +303,13 @@ export function renderCliNotice(
           : "neutral";
   const marker = `[${label}]`;
   const prefix = `${marker} `;
-  const lines = wrapCliText(message, capabilities.width, prefix);
+  const continuationPrefix = " ".repeat(prefix.length);
+  const lines = wrapCliText(
+    message,
+    capabilities.width,
+    prefix,
+    continuationPrefix,
+  );
   return lines
     .map((line, index) =>
       index === 0 ? colorize(line, status, capabilities) : line,

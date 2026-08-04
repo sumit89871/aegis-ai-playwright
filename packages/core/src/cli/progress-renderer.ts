@@ -22,7 +22,7 @@ export interface CliProgressReporter {
   dispose(): void;
 }
 
-const DEFAULT_DELAY_MS = 300;
+export const CLI_PROGRESS_DELAY_MS = 400;
 const DEFAULT_INTERVAL_MS = 80;
 
 const defaultScheduler: CliProgressScheduler = {
@@ -90,7 +90,7 @@ export function createCliProgressReporter(options: {
           renderFrame,
           options.intervalMs ?? DEFAULT_INTERVAL_MS,
         );
-    }, options.delayMs ?? DEFAULT_DELAY_MS);
+    }, options.delayMs ?? CLI_PROGRESS_DELAY_MS);
   };
   const finish = (failureMessage?: string): void => {
     stopTimers();
