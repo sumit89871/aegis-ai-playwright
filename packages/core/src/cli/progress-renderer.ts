@@ -114,12 +114,12 @@ export function renderCliStatusLine(
 
 export function resolveCliProgressStyle(
   capabilities: TerminalCapabilities,
+  requestedStyle = capabilities.requestedProgressStyle,
 ): CliProgressStyle {
-  if (!capabilities.animation || capabilities.progressStyle === "static")
-    return "static";
-  if (capabilities.progressStyle === "thinking" && !capabilities.brightness)
+  if (!capabilities.animation || requestedStyle === "static") return "static";
+  if (requestedStyle === "thinking" && !capabilities.brightness)
     return "spinner";
-  return capabilities.progressStyle;
+  return requestedStyle;
 }
 
 function messageWithEllipsis(stage: string): string {
@@ -149,11 +149,12 @@ export function createCliProgressReporter(options: {
     options.capabilities.rich &&
     options.capabilities.stderrIsTty &&
     options.stream.isTTY !== false;
-  const requestedStyle = options.style ?? options.capabilities.progressStyle;
-  const effectiveStyle = resolveCliProgressStyle({
-    ...options.capabilities,
-    progressStyle: requestedStyle,
-  });
+  const requestedStyle =
+    options.style ?? options.capabilities.requestedProgressStyle;
+  const effectiveStyle = resolveCliProgressStyle(
+    options.capabilities,
+    requestedStyle,
+  );
   const animated = enabled && effectiveStyle !== "static";
   const spinnerFrames = options.capabilities.unicode
     ? UNICODE_SPINNER_FRAMES
@@ -175,11 +176,13 @@ export function createCliProgressReporter(options: {
   };
   const clearTransient = (): void => {
     if (!visible || !animated) return;
-    const reset = options.capabilities.ansi ? ANSI_RESET : "";
-    const clear = options.capabilities.ansi
+    const reset = options.capabilities.progressAnsi ? ANSI_RESET : "";
+    const clear = options.capabilities.cursorControl
       ? ANSI_STYLE.clearLine
       : " ".repeat(options.capabilities.width);
-    const showCursor = options.capabilities.ansi ? ANSI_STYLE.showCursor : "";
+    const showCursor = options.capabilities.cursorControl
+      ? ANSI_STYLE.showCursor
+      : "";
     options.stream.write(`${reset}\r${clear}\r${showCursor}`);
     visible = false;
   };
@@ -208,8 +211,12 @@ export function createCliProgressReporter(options: {
       );
       line = `${symbol} ${boundedMessage(message, maximumMessageWidth)}`;
     }
-    const hideCursor = options.capabilities.ansi ? ANSI_STYLE.hideCursor : "";
-    const clear = options.capabilities.ansi ? ANSI_STYLE.clearLine : "";
+    const hideCursor = options.capabilities.cursorControl
+      ? ANSI_STYLE.hideCursor
+      : "";
+    const clear = options.capabilities.cursorControl
+      ? ANSI_STYLE.clearLine
+      : "";
     options.stream.write(
       `\r${clear}${hideCursor}${padToWidth(line, options.capabilities.width)}`,
     );

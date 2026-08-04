@@ -68,12 +68,30 @@ export async function runCliProgressDemonstration(options: {
         "Demonstration result",
         [
           {
-            label: "Progress style",
-            value: options.capabilities.progressStyle,
+            label: "Requested progress style",
+            value: options.capabilities.requestedProgressStyle,
+          },
+          {
+            label: "Effective progress style",
+            value: options.capabilities.effectiveProgressStyle,
           },
           {
             label: "Symbol mode",
             value: options.capabilities.symbolMode,
+          },
+          {
+            label: "ANSI brightness",
+            value: options.capabilities.brightness
+              ? "supported"
+              : "unsupported",
+          },
+          {
+            label: "Animation",
+            value: options.capabilities.animation ? "enabled" : "disabled",
+          },
+          {
+            label: "Fallback reason",
+            value: options.capabilities.fallbackReason,
           },
           { label: "Network calls", value: "0", status: "success" },
           { label: "User artifacts", value: "not accessed", status: "success" },
@@ -89,30 +107,70 @@ export async function runCliProgressDemonstration(options: {
   );
 }
 
-function terminalDiagnostic(capabilities: TerminalCapabilities): string {
+export function renderCliTerminalDiagnostic(
+  capabilities: TerminalCapabilities,
+): string {
   return renderCliSection(
     "Safe terminal diagnostic",
     [
       { label: "stdout TTY", value: String(capabilities.stdoutIsTty) },
       { label: "stderr TTY", value: String(capabilities.stderrIsTty) },
+      {
+        label: "stdout colour depth",
+        value: String(capabilities.stdout.colourDepth),
+      },
+      {
+        label: "stderr colour depth",
+        value: String(capabilities.stderr.colourDepth),
+      },
+      {
+        label: "stdout basic colour",
+        value: String(capabilities.stdout.supportsBasicColour),
+      },
+      {
+        label: "stderr basic colour",
+        value: String(capabilities.stderr.supportsBasicColour),
+      },
       { label: "Terminal width", value: String(capabilities.width) },
       { label: "CI", value: String(capabilities.ci) },
       { label: "TERM dumb", value: String(capabilities.termDumb) },
       {
-        label: "Windows Terminal",
+        label: "Windows Terminal hint",
         value: String(capabilities.windowsTerminal),
       },
+      {
+        label: "Capability source",
+        value: capabilities.capabilitySources.join(", "),
+      },
       { label: "Output mode", value: capabilities.outputMode },
-      { label: "Symbol mode", value: capabilities.symbolMode },
-      { label: "Emoji mode", value: capabilities.emojiMode },
-      { label: "Progress style", value: capabilities.progressStyle },
-      { label: "Progress symbol class", value: capabilities.symbolMode },
-      { label: "Animation enabled", value: String(capabilities.animation) },
       { label: "Colour enabled", value: String(capabilities.color) },
+      { label: "ANSI SGR supported", value: String(capabilities.progressAnsi) },
       {
         label: "ANSI brightness",
         value: String(capabilities.brightness),
       },
+      { label: "Unicode supported", value: String(capabilities.unicode) },
+      { label: "Emoji supported", value: String(capabilities.emoji) },
+      {
+        label: "Requested symbol mode",
+        value: capabilities.requestedSymbolMode,
+      },
+      { label: "Effective symbol mode", value: capabilities.symbolMode },
+      { label: "Requested emoji mode", value: capabilities.emojiMode },
+      {
+        label: "Effective emoji mode",
+        value: capabilities.effectiveEmojiMode,
+      },
+      {
+        label: "Requested progress style",
+        value: capabilities.requestedProgressStyle,
+      },
+      {
+        label: "Effective progress style",
+        value: capabilities.effectiveProgressStyle,
+      },
+      { label: "Animation enabled", value: String(capabilities.animation) },
+      { label: "Fallback reason", value: capabilities.fallbackReason },
       { label: "Delayed start", value: `${String(CLI_PROGRESS_DELAY_MS)} ms` },
       { label: "Refresh", value: `${String(CLI_PROGRESS_REFRESH_MS)} ms` },
     ],
@@ -125,9 +183,8 @@ async function main(): Promise<void> {
   const capabilities = detectTerminalCapabilities({
     arguments: arguments_,
     environment: process.env,
-    stdoutIsTty: process.stdout.isTTY,
-    stderrIsTty: process.stderr.isTTY,
-    columns: process.stdout.columns,
+    stdout: process.stdout,
+    stderr: process.stderr,
     platform: process.platform,
   });
   const progress = createCliProgressReporter({
@@ -164,7 +221,7 @@ async function main(): Promise<void> {
         "Use a documented progress, symbol, animation, or diagnostic option.",
       );
     if (arguments_.includes("--diagnose-terminal")) {
-      process.stdout.write(`${terminalDiagnostic(capabilities)}\n`);
+      process.stdout.write(`${renderCliTerminalDiagnostic(capabilities)}\n`);
       return;
     }
     await runCliProgressDemonstration({

@@ -21,6 +21,7 @@ import type {
 import {
   CLI_PROGRESS_DEMO_STAGE_DURATION_MS,
   CLI_PROGRESS_DEMO_STAGES,
+  renderCliTerminalDiagnostic,
   runCliProgressDemonstration,
 } from "../../scripts/cli-progress-demo.ts";
 
@@ -221,6 +222,39 @@ await describe("blind review command workflow", async () => {
       assert.match(invalid.stderr, /Fix:/u);
       assert.doesNotMatch(invalid.stderr, /\n\s+at |C:\\Users|\/home\//u);
     }
+  });
+
+  await it("reports stream capabilities without terminal-brand or private data", () => {
+    const capableStream = {
+      isTTY: true,
+      columns: 120,
+      getColorDepth: (): number => 24,
+      hasColors: (): boolean => true,
+    } as const;
+    const capabilities = detectTerminalCapabilities({
+      arguments: ["--progress-style=thinking", "--emoji"],
+      environment: {},
+      stdout: capableStream,
+      stderr: capableStream,
+      platform: "win32",
+    });
+    const diagnostic = renderCliTerminalDiagnostic(capabilities);
+    assert.match(diagnostic, /stdout colour depth:.*24/iu);
+    assert.match(diagnostic, /stderr colour depth:.*24/iu);
+    assert.match(diagnostic, /Windows Terminal hint:.*false/iu);
+    assert.match(diagnostic, /Capability source:.*stream-apis/iu);
+    assert.match(diagnostic, /Colour enabled:.*true/iu);
+    assert.match(diagnostic, /ANSI SGR supported:.*true/iu);
+    assert.match(diagnostic, /ANSI brightness:.*true/iu);
+    assert.match(diagnostic, /Requested progress style:.*thinking/iu);
+    assert.match(diagnostic, /Effective progress style:.*thinking/iu);
+    assert.match(diagnostic, /Effective symbol mode:.*emoji/iu);
+    assert.match(diagnostic, /Animation enabled:.*true/iu);
+    assert.match(diagnostic, /Fallback reason:.*none/iu);
+    assert.doesNotMatch(
+      diagnostic,
+      /WT_SESSION=|C:\\Users|\/home\/|authorization|token|secret/iu,
+    );
   });
 
   await it("prepares a packet, private mapping, and blank review without leaking rank", async () => {

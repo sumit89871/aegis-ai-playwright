@@ -11,6 +11,30 @@ export type CliOutputMode = "rich" | "plain" | "summary-json" | "private-json";
 export type CliProgressStyle = "thinking" | "spinner" | "static";
 export type CliEmojiMode = "auto" | "always" | "never";
 export type CliSymbolMode = "emoji" | "unicode" | "ascii";
+export type CliRequestedSymbolMode = "auto" | "unicode" | "ascii";
+export type CliEffectiveEmojiMode = "enabled" | "disabled";
+export type CliCapabilitySource =
+  "stream-apis" | "terminal-hint" | "explicit-override" | "fallback";
+
+export interface CliCapabilityStream {
+  readonly isTTY?: boolean;
+  readonly columns?: number;
+  getColorDepth?(environment?: NodeJS.ProcessEnv): number;
+  hasColors?(count?: number, environment?: NodeJS.ProcessEnv): boolean;
+}
+
+export interface CliStreamCapabilities {
+  readonly isInteractive: boolean;
+  readonly colourDepth: number;
+  readonly supportsBasicColour: boolean;
+  readonly supportsAnsiSgr: boolean;
+  readonly supportsBrightness: boolean;
+  readonly supportsCursorControl: boolean;
+  readonly supportsUnicode: boolean;
+  readonly supportsEmoji: boolean;
+  readonly width: number;
+  readonly source: CliCapabilitySource;
+}
 
 export class CliOptionError extends Error {
   public readonly code: string;
@@ -38,13 +62,21 @@ export interface TerminalCapabilities {
   readonly outputMode: CliOutputMode;
   readonly rich: boolean;
   readonly ansi: boolean;
+  readonly progressAnsi: boolean;
   readonly brightness: boolean;
+  readonly cursorControl: boolean;
   readonly color: boolean;
   readonly unicode: boolean;
   readonly emoji: boolean;
   readonly emojiMode: CliEmojiMode;
+  readonly effectiveEmojiMode: CliEffectiveEmojiMode;
+  readonly requestedSymbolMode: CliRequestedSymbolMode;
   readonly symbolMode: CliSymbolMode;
+  readonly requestedProgressStyle: CliProgressStyle;
+  readonly effectiveProgressStyle: CliProgressStyle;
   readonly progressStyle: CliProgressStyle;
+  readonly fallbackReason: string;
+  readonly capabilitySources: readonly CliCapabilitySource[];
   readonly animation: boolean;
   readonly windowsTerminal: boolean;
   readonly ci: boolean;
@@ -52,11 +84,15 @@ export interface TerminalCapabilities {
   readonly width: number;
   readonly stdoutIsTty: boolean;
   readonly stderrIsTty: boolean;
+  readonly stdout: CliStreamCapabilities;
+  readonly stderr: CliStreamCapabilities;
 }
 
 export interface TerminalCapabilityInput {
   readonly arguments: readonly string[];
   readonly environment?: Readonly<Record<string, string | undefined>>;
+  readonly stdout?: CliCapabilityStream;
+  readonly stderr?: CliCapabilityStream;
   readonly stdoutIsTty?: boolean;
   readonly stderrIsTty?: boolean;
   readonly columns?: number;
@@ -178,13 +214,114 @@ function boundedWidth(columns: number | undefined): number {
   );
 }
 
+function capabilityEnvironment(
+  environment: Readonly<Record<string, string | undefined>>,
+): NodeJS.ProcessEnv {
+  return {
+    ...(environment.TERM === undefined ? {} : { TERM: environment.TERM }),
+    ...(environment.COLORTERM === undefined
+      ? {}
+      : { COLORTERM: environment.COLORTERM }),
+    ...(environment.TERM_PROGRAM === undefined
+      ? {}
+      : { TERM_PROGRAM: environment.TERM_PROGRAM }),
+    ...(environment.WT_SESSION === undefined ? {} : { WT_SESSION: "1" }),
+  };
+}
+
+function safeColourDepth(
+  stream: CliCapabilityStream | undefined,
+  environment?: NodeJS.ProcessEnv,
+): number | undefined {
+  try {
+    const value =
+      environment === undefined
+        ? stream?.getColorDepth?.()
+        : stream?.getColorDepth?.(environment);
+    return value === undefined || !Number.isFinite(value)
+      ? undefined
+      : Math.max(1, Math.floor(value));
+  } catch {
+    return undefined;
+  }
+}
+
+function safeHasBasicColour(
+  stream: CliCapabilityStream | undefined,
+  environment?: NodeJS.ProcessEnv,
+): boolean | undefined {
+  try {
+    return environment === undefined
+      ? stream?.hasColors?.(16)
+      : stream?.hasColors?.(16, environment);
+  } catch {
+    return undefined;
+  }
+}
+
+function detectStreamCapabilities(input: {
+  readonly stream?: CliCapabilityStream;
+  readonly legacyIsTty?: boolean;
+  readonly legacyColumns?: number;
+  readonly environment: Readonly<Record<string, string | undefined>>;
+  readonly platform: NodeJS.Platform;
+  readonly termDumb: boolean;
+  readonly terminalHint: boolean;
+}): CliStreamCapabilities {
+  const isInteractive = input.stream?.isTTY ?? input.legacyIsTty === true;
+  const hasSemanticColourOverride =
+    input.environment.NO_COLOR !== undefined ||
+    input.environment.FORCE_COLOR === "0";
+  const probeEnvironment = hasSemanticColourOverride
+    ? capabilityEnvironment(input.environment)
+    : undefined;
+  const colourDepth = safeColourDepth(input.stream, probeEnvironment);
+  const hasBasicColour = safeHasBasicColour(input.stream, probeEnvironment);
+  const streamApiAvailable =
+    colourDepth !== undefined || hasBasicColour !== undefined;
+  const positiveStreamEvidence =
+    (colourDepth ?? 0) >= 4 || hasBasicColour === true;
+  const fallbackAnsiHint = input.platform !== "win32" || input.terminalHint;
+  const supportsAnsiSgr =
+    isInteractive &&
+    !input.termDumb &&
+    (streamApiAvailable ? positiveStreamEvidence : fallbackAnsiHint);
+  const supportsUnicode =
+    isInteractive &&
+    !input.termDumb &&
+    (input.platform !== "win32" ||
+      positiveStreamEvidence ||
+      input.terminalHint);
+  const supportsEmoji =
+    supportsUnicode &&
+    (input.platform === "win32"
+      ? positiveStreamEvidence || input.terminalHint
+      : input.terminalHint);
+  return Object.freeze({
+    isInteractive,
+    colourDepth: colourDepth ?? 1,
+    supportsBasicColour: streamApiAvailable
+      ? positiveStreamEvidence
+      : supportsAnsiSgr,
+    supportsAnsiSgr,
+    supportsBrightness: supportsAnsiSgr,
+    supportsCursorControl: supportsAnsiSgr,
+    supportsUnicode,
+    supportsEmoji,
+    width: boundedWidth(input.stream?.columns ?? input.legacyColumns),
+    source: streamApiAvailable
+      ? "stream-apis"
+      : input.terminalHint
+        ? "terminal-hint"
+        : "fallback",
+  });
+}
+
 export function detectTerminalCapabilities(
   input: TerminalCapabilityInput,
 ): TerminalCapabilities {
   const environment = input.environment ?? {};
-  const stdoutIsTty = input.stdoutIsTty === true;
-  const stderrIsTty = input.stderrIsTty === true;
-  const width = boundedWidth(input.columns);
+  const platform = input.platform ?? process.platform;
   const json = input.arguments.includes("--json");
   const summaryJson = input.arguments.includes("--summary-json");
   const explicitlyPlain = input.arguments.includes("--plain");
@@ -201,7 +338,34 @@ export function detectTerminalCapabilities(
       ? "never"
       : "auto";
   const windowsTerminal =
-    input.platform === "win32" && environment.WT_SESSION !== undefined;
+    platform === "win32" && environment.WT_SESSION !== undefined;
+  const terminalHint =
+    windowsTerminal || environment.TERM_PROGRAM !== undefined;
+  const stdout = detectStreamCapabilities({
+    ...(input.stdout === undefined ? {} : { stream: input.stdout }),
+    ...(input.stdoutIsTty === undefined
+      ? {}
+      : { legacyIsTty: input.stdoutIsTty }),
+    ...(input.columns === undefined ? {} : { legacyColumns: input.columns }),
+    environment,
+    platform,
+    termDumb: dumb,
+    terminalHint,
+  });
+  const stderr = detectStreamCapabilities({
+    ...(input.stderr === undefined ? {} : { stream: input.stderr }),
+    ...(input.stderrIsTty === undefined
+      ? {}
+      : { legacyIsTty: input.stderrIsTty }),
+    ...(input.columns === undefined ? {} : { legacyColumns: input.columns }),
+    environment,
+    platform,
+    termDumb: dumb,
+    terminalHint,
+  });
+  const stdoutIsTty = stdout.isInteractive;
+  const stderrIsTty = stderr.isInteractive;
+  const width = stdout.width;
   const rich =
     !json &&
     !summaryJson &&
@@ -212,34 +376,61 @@ export function detectTerminalCapabilities(
     width >= CLI_MINIMUM_RICH_WIDTH;
   const noColor = environment.NO_COLOR !== undefined;
   const forceColorDisabled = environment.FORCE_COLOR === "0";
-  const modernWindows =
-    input.platform !== "win32" ||
-    windowsTerminal ||
-    environment.TERM_PROGRAM !== undefined;
   const asciiRequested =
     input.arguments.includes("--ascii") || environment.AEGIS_ASCII === "1";
   const unicodeRequested = input.arguments.includes("--unicode");
+  const requestedSymbolMode: CliRequestedSymbolMode = asciiRequested
+    ? "ascii"
+    : unicodeRequested
+      ? "unicode"
+      : "auto";
+  const symbolOverride =
+    asciiRequested || unicodeRequested || emojiMode !== "auto";
   const unicode =
-    rich && !asciiRequested && (unicodeRequested || modernWindows) && !dumb;
-  const ansi = rich && modernWindows;
-  const emojiSupported =
-    unicode &&
-    ansi &&
-    (windowsTerminal ||
-      (input.platform !== "win32" && environment.TERM_PROGRAM !== undefined));
+    rich &&
+    !asciiRequested &&
+    (unicodeRequested || emojiMode === "always" || stdout.supportsUnicode);
   const emoji =
     unicode &&
-    ansi &&
     emojiMode !== "never" &&
-    (emojiMode === "always" || emojiSupported);
-  const symbolMode: CliSymbolMode = !unicode
+    (emojiMode === "always" || stdout.supportsEmoji);
+  const symbolMode: CliSymbolMode = asciiRequested
     ? "ascii"
     : emoji
       ? "emoji"
-      : "unicode";
+      : unicode
+        ? "unicode"
+        : "ascii";
   const noAnimation = input.arguments.includes("--no-animation");
-  const progressStyle: CliProgressStyle =
-    !rich || noAnimation ? "static" : requestedStyle;
+  const baseAnimation =
+    rich && stderrIsTty && stderr.supportsCursorControl && !noAnimation;
+  const animation = baseAnimation && requestedStyle !== "static";
+  const effectiveProgressStyle: CliProgressStyle = !animation
+    ? "static"
+    : requestedStyle === "thinking" && !stderr.supportsBrightness
+      ? "spinner"
+      : requestedStyle;
+  const fallbackReason =
+    effectiveProgressStyle === requestedStyle
+      ? "none"
+      : !rich
+        ? "Human rich output is disabled by the output contract."
+        : noAnimation
+          ? "Animation was disabled explicitly."
+          : !stderrIsTty
+            ? "Transient stderr is not an interactive TTY."
+            : !stderr.supportsCursorControl
+              ? "Cursor control is unsupported on transient stderr."
+              : requestedStyle === "thinking" && !stderr.supportsBrightness
+                ? "ANSI brightness is unsupported on transient stderr."
+                : "The requested progress style is unavailable.";
+  const capabilitySources = Object.freeze([
+    ...new Set<CliCapabilitySource>([
+      stdout.source,
+      stderr.source,
+      ...(symbolOverride ? (["explicit-override"] as const) : []),
+    ]),
+  ]);
   return Object.freeze({
     outputMode: json
       ? "private-json"
@@ -249,22 +440,32 @@ export function detectTerminalCapabilities(
           ? "rich"
           : "plain",
     rich,
-    ansi,
-    brightness: ansi,
-    color: ansi && !noColor && !forceColorDisabled,
+    ansi: rich && stdout.supportsAnsiSgr,
+    progressAnsi: rich && stderr.supportsAnsiSgr,
+    brightness: rich && stderr.supportsBrightness,
+    cursorControl: rich && stderr.supportsCursorControl,
+    color:
+      rich && stdout.supportsBasicColour && !noColor && !forceColorDisabled,
     unicode,
     emoji,
     emojiMode,
+    effectiveEmojiMode: emoji ? "enabled" : "disabled",
+    requestedSymbolMode,
     symbolMode,
-    progressStyle,
-    animation:
-      rich && stderrIsTty && !noAnimation && requestedStyle !== "static",
+    requestedProgressStyle: requestedStyle,
+    effectiveProgressStyle,
+    progressStyle: effectiveProgressStyle,
+    fallbackReason,
+    capabilitySources,
+    animation,
     windowsTerminal,
     ci,
     termDumb: dumb,
     width,
     stdoutIsTty,
     stderrIsTty,
+    stdout,
+    stderr,
   });
 }
 

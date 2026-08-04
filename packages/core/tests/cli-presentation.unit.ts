@@ -35,6 +35,7 @@ import {
   wrapCliText,
 } from "../src/index.ts";
 import type {
+  CliCapabilityStream,
   CliProgressScheduler,
   LocatorBlindHoldoutAggregateSummary,
   TerminalCapabilities,
@@ -48,16 +49,36 @@ function capabilities(
     readonly stderrIsTty?: boolean;
     readonly columns?: number;
     readonly platform?: NodeJS.Platform;
+    readonly stdout?: CliCapabilityStream;
+    readonly stderr?: CliCapabilityStream;
   } = {},
 ): TerminalCapabilities {
   return detectTerminalCapabilities({
     arguments: options.arguments ?? [],
     environment: options.environment ?? {},
+    ...(options.stdout === undefined ? {} : { stdout: options.stdout }),
+    ...(options.stderr === undefined ? {} : { stderr: options.stderr }),
     stdoutIsTty: options.stdoutIsTty ?? true,
     stderrIsTty: options.stderrIsTty ?? true,
     columns: options.columns ?? 100,
     platform: options.platform ?? "linux",
   });
+}
+
+function capableStream(
+  options: {
+    readonly isTTY?: boolean;
+    readonly columns?: number;
+    readonly colourDepth?: number;
+    readonly hasBasicColour?: boolean;
+  } = {},
+): CliCapabilityStream {
+  return {
+    isTTY: options.isTTY ?? true,
+    columns: options.columns ?? 100,
+    getColorDepth: () => options.colourDepth ?? 24,
+    hasColors: () => options.hasBasicColour ?? true,
+  };
 }
 
 async function emptySummary(): Promise<LocatorBlindHoldoutAggregateSummary> {
@@ -233,6 +254,92 @@ await describe("terminal capability detection", async () => {
     assert.equal(forceColorOff.color, false);
     assert.equal(forceColorOff.emoji, true);
     assert.equal(forceColorOff.unicode, true);
+  });
+
+  await it("uses positive stream evidence on Win32 without terminal-brand hints", () => {
+    const stream = capableStream();
+    const result = capabilities({
+      platform: "win32",
+      stdout: stream,
+      stderr: stream,
+    });
+    assert.equal(result.windowsTerminal, false);
+    assert.equal(result.stdout.colourDepth, 24);
+    assert.equal(result.stderr.colourDepth, 24);
+    assert.equal(result.stdout.supportsBasicColour, true);
+    assert.equal(result.stderr.supportsBasicColour, true);
+    assert.equal(result.ansi, true);
+    assert.equal(result.progressAnsi, true);
+    assert.equal(result.brightness, true);
+    assert.equal(result.cursorControl, true);
+    assert.equal(result.color, true);
+    assert.equal(result.unicode, true);
+    assert.equal(result.emoji, true);
+    assert.equal(result.symbolMode, "emoji");
+    assert.equal(result.requestedProgressStyle, "thinking");
+    assert.equal(result.effectiveProgressStyle, "thinking");
+    assert.equal(result.animation, true);
+    assert.equal(result.fallbackReason, "none");
+    assert.deepEqual(result.capabilitySources, ["stream-apis"]);
+  });
+
+  await it("preserves explicit symbol precedence on a capable unbranded Win32 TTY", () => {
+    const stream = capableStream();
+    for (const [arguments_, symbolMode, emojiMode] of [
+      [["--progress-style=thinking", "--emoji"], "emoji", "enabled"],
+      [
+        ["--progress-style=thinking", "--no-emoji", "--unicode"],
+        "unicode",
+        "disabled",
+      ],
+      [["--progress-style=thinking", "--ascii"], "ascii", "disabled"],
+    ] as const) {
+      const result = capabilities({
+        arguments: arguments_,
+        platform: "win32",
+        stdout: stream,
+        stderr: stream,
+      });
+      assert.equal(result.symbolMode, symbolMode);
+      assert.equal(result.effectiveEmojiMode, emojiMode);
+      assert.equal(result.requestedProgressStyle, "thinking");
+      assert.equal(result.effectiveProgressStyle, "thinking");
+      assert.equal(result.brightness, true);
+      assert.equal(result.animation, true);
+      assert.equal(result.fallbackReason, "none");
+      assert.ok(result.capabilitySources.includes("explicit-override"));
+    }
+  });
+
+  await it("separates semantic colour overrides from SGR brightness and symbols", () => {
+    const stream = capableStream();
+    for (const environment of [{ NO_COLOR: "1" }, { FORCE_COLOR: "0" }]) {
+      const result = capabilities({
+        arguments: ["--progress-style=thinking"],
+        environment,
+        platform: "win32",
+        stdout: stream,
+        stderr: stream,
+      });
+      assert.equal(result.color, false);
+      assert.equal(result.brightness, true);
+      assert.equal(result.effectiveProgressStyle, "thinking");
+      assert.equal(result.symbolMode, "emoji");
+    }
+  });
+
+  await it("accepts either colour-depth or hasColors as positive stream evidence", () => {
+    const depthOnly = capableStream({ hasBasicColour: false });
+    const hasColorsOnly = capableStream({ colourDepth: 1 });
+    for (const stream of [depthOnly, hasColorsOnly]) {
+      const result = capabilities({
+        platform: "win32",
+        stdout: stream,
+        stderr: stream,
+      });
+      assert.equal(result.color, true);
+      assert.equal(result.brightness, true);
+    }
   });
 
   await it("selects explicit emoji, Unicode, ASCII, and static modes", () => {
@@ -551,6 +658,8 @@ await describe("delayed CLI progress", async () => {
       readonly animation?: boolean;
       readonly brightness?: boolean;
       readonly stderrIsTty?: boolean;
+      readonly stdout?: CliCapabilityStream;
+      readonly stderr?: CliCapabilityStream;
     } = {},
   ): {
     readonly scheduler: FakeScheduler;
@@ -570,6 +679,8 @@ await describe("delayed CLI progress", async () => {
       ...(options.stderrIsTty === undefined
         ? {}
         : { stderrIsTty: options.stderrIsTty }),
+      ...(options.stdout === undefined ? {} : { stdout: options.stdout }),
+      ...(options.stderr === undefined ? {} : { stderr: options.stderr }),
     });
     const reporter = createCliProgressReporter({
       capabilities: {
@@ -645,6 +756,38 @@ await describe("delayed CLI progress", async () => {
     );
     assert.ok(writes.join("").endsWith("\u001B[?25h"));
     assert.equal(CLI_PROGRESS_REFRESH_MS, 150);
+  });
+
+  await it("pulses with forced emoji, Unicode, and ASCII symbols without spinner rotation", () => {
+    const stream = capableStream();
+    for (const [arguments_, symbol] of [
+      [["--progress-style=thinking", "--emoji"], CLI_THINKING_EMOJI],
+      [
+        ["--progress-style=thinking", "--no-emoji", "--unicode"],
+        CLI_UNICODE_PROGRESS_SYMBOL,
+      ],
+      [["--progress-style=thinking", "--ascii"], CLI_ASCII_PROGRESS_SYMBOL],
+    ] as const) {
+      const progress = fixture({
+        arguments: arguments_,
+        platform: "win32",
+        stdout: stream,
+        stderr: stream,
+      });
+      progress.reporter.start("Capability based thinking");
+      progress.scheduler.advance(CLI_PROGRESS_DELAY_MS);
+      progress.scheduler.advance(CLI_PROGRESS_REFRESH_MS * 2);
+      progress.reporter.stop();
+      const frames = progress.writes.filter((entry) =>
+        entry.includes("Capability based thinking"),
+      );
+      assert.equal(frames.length, 3);
+      for (const frame of frames) {
+        assert.ok(stripAnsi(frame).trimStart().startsWith(symbol));
+        assert.ok(frame.includes(ANSI_RESET));
+        assert.doesNotMatch(frame, /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/u);
+      }
+    }
   });
 
   await it("updates stage text while pulsing and prevents writes after success", () => {

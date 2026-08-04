@@ -12,7 +12,9 @@ dim → normal → bright → normal → dim → normal
 
 The symbol, space, message text, and ellipsis keep the same terminal-cell width. Only the message brightness changes. ANSI blink is prohibited because support and accessibility are inconsistent. Every frame resets styling, and completion cancels unref'd timers, clears the transient stderr line, and restores the cursor before permanent stdout output.
 
-Windows Terminal auto-selects `💭`. A supported non-emoji terminal uses `↻`; ASCII mode uses `[~]`. If brightness is unavailable but animation is supported, the existing rotating spinner is used. Static mode prints truthful stage text without cursor animation. Plain, JSON, CI, redirected, non-TTY, and `TERM=dumb` output never animates.
+Capability detection reads the actual output streams without emitting probe sequences. stdout controls permanent rich reports; stderr controls transient progress. `isTTY`, `getColorDepth()`, `hasColors(16)`, and `columns` are authoritative when available. `WT_SESSION` and `TERM_PROGRAM` remain positive hints, but their absence is never negative evidence. An interactive Win32 stream reporting at least four-bit color or basic 16-color support is treated as ANSI SGR, brightness, cursor-control, and Unicode capable; the current auto policy also permits the professional `💭` progress emoji. A supported non-emoji terminal uses `↻`; ASCII mode uses `[~]`.
+
+Requested and effective progress styles are distinct and the diagnostic reports any controlled fallback reason. Thinking works with emoji, Unicode, and ASCII symbols. It falls back to the rotating spinner only when transient stderr can animate but genuinely lacks ANSI brightness; missing emoji, missing Unicode, disabled semantic color, or absent terminal-brand variables do not cause spinner fallback. Static mode prints truthful stage text without cursor animation. Plain, JSON, CI, redirected, non-TTY, and `TERM=dumb` output never animates.
 
 ## Options
 
@@ -29,9 +31,9 @@ npm run cli:demo:progress -- --plain
 npm run cli:demo:progress -- --diagnose-terminal
 ```
 
-`--unicode` and `--ascii` conflict. `--emoji` and `--no-emoji` conflict. `--ascii --emoji` is invalid. Unsupported progress styles fail with a safe code, option name, supported values, and remediation—never a stack trace. `NO_COLOR` and `FORCE_COLOR=0` affect color, not Unicode or emoji selection.
+`--unicode` and `--ascii` conflict. `--emoji` and `--no-emoji` conflict. `--ascii --emoji` is invalid. Output contracts are resolved first, then explicit symbol restrictions, explicit emoji preferences, and finally auto-detection. Unsupported progress styles fail with a safe code, option name, supported values, and remediation—never a stack trace. `NO_COLOR` and `FORCE_COLOR=0` affect semantic color, not Unicode, emoji, or supported dim/bright animation.
 
-The diagnostic prints only TTY booleans, bounded width, CI/dumb-terminal booleans, Windows Terminal presence, selected modes, animation/color/brightness booleans, and timing constants. It never prints `WT_SESSION`, environment contents, paths, usernames, or secrets.
+The diagnostic prints only TTY booleans, stream color depths/basic-color support, bounded width, CI/dumb-terminal booleans, Windows Terminal hint presence, controlled capability sources, requested/effective symbol/emoji/progress modes, ANSI/animation/color booleans, fallback reason, and timing constants. It never prints `WT_SESSION`, environment contents, paths, usernames, or secrets.
 
 ## Output and accessibility contracts
 

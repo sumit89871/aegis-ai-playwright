@@ -34,9 +34,8 @@ const arguments_ = process.argv.slice(2);
 const capabilities = detectTerminalCapabilities({
   arguments: arguments_,
   environment: process.env,
-  stdoutIsTty: process.stdout.isTTY,
-  stderrIsTty: process.stderr.isTTY,
-  columns: process.stdout.columns,
+  stdout: process.stdout,
+  stderr: process.stderr,
   platform: process.platform,
 });
 const progress = createCliProgressReporter({
