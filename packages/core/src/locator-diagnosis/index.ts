@@ -9,3 +9,5 @@ export * from "./locator-diagnosis-validator.ts";
 export * from "./locator-diagnosis-prompt.ts";
 export * from "./locator-diagnosis-client.ts";
 export * from "./locator-diagnosis-renderer.ts";
+export * from "./locator-advisory-reranking-prompt.ts";
+export * from "./locator-advisory-reranking.ts";

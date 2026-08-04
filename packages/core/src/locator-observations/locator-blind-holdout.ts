@@ -60,61 +60,61 @@ export interface LocatorBlindHoldoutAggregateSummary {
   readonly sourceTypeCounts: Readonly<
     Record<LocatorObservation["sourceType"], number>
   >;
-  readonly metrics: {
-    readonly classification: {
-      readonly agreement: EvaluationRate;
-      readonly unknownOrEvaluationAbstention: EvaluationRate;
-    };
-    readonly recommendation: {
-      readonly agreement: EvaluationRate;
-      readonly candidatesAvailableAgreement: EvaluationRate;
-      readonly noChangePrecision: EvaluationRate;
-      readonly noChangeRecall: EvaluationRate;
-      readonly notApplicableAgreement: EvaluationRate;
-      readonly insufficientEvidenceAgreement: EvaluationRate;
-      readonly collectionUnavailableAgreement: EvaluationRate;
-    };
-    readonly ranking: {
-      readonly top1Acceptable: EvaluationRate;
-      readonly top3Acceptable: EvaluationRate;
-      readonly preferredAtTop1: EvaluationRate;
-      readonly meanFirstAcceptableRank: number | null;
-      readonly noAcceptableCandidateReturned: number;
-      readonly forbiddenAtTop1: EvaluationRate;
-      readonly forbiddenWithinTop3: EvaluationRate;
-    };
-    readonly safety: {
-      readonly unsafeRecommendation: EvaluationRate;
-      readonly incorrectLocatorChangeCount: number;
-      readonly inventedCandidateCount: number;
-      readonly unknownCandidateIdCount: number;
-      readonly xpathRecommendationCount: number;
-      readonly positionalRepairCount: number;
-      readonly forceRecommendationCount: number;
-      readonly sourcePatchRecommendationCount: number;
-      readonly shellCommandRecommendationCount: number;
-    };
-    readonly confidence: {
-      readonly distribution: Readonly<
-        Record<"high" | "medium" | "low", number>
-      >;
-      readonly highConfidenceCorrect: number;
-      readonly highConfidenceIncorrect: number;
-      readonly floorAgreement: EvaluationRate;
-    };
-    readonly abstention: {
-      readonly appropriateCount: number;
-      readonly inappropriateCount: number;
-      readonly expectedButRecommendationMadeCount: number;
-      readonly opportunityCount: number;
-      readonly correctness: EvaluationRate;
-    };
-  };
+  readonly metrics: LocatorBlindAggregateMetrics;
   readonly isolation: {
     readonly networkCalls: 0;
     readonly apiKeyRequired: false;
     readonly locatorApplications: 0;
     readonly automaticHealing: false;
+  };
+}
+
+export interface LocatorBlindAggregateMetrics {
+  readonly classification: {
+    readonly agreement: EvaluationRate;
+    readonly unknownOrEvaluationAbstention: EvaluationRate;
+  };
+  readonly recommendation: {
+    readonly agreement: EvaluationRate;
+    readonly candidatesAvailableAgreement: EvaluationRate;
+    readonly noChangePrecision: EvaluationRate;
+    readonly noChangeRecall: EvaluationRate;
+    readonly notApplicableAgreement: EvaluationRate;
+    readonly insufficientEvidenceAgreement: EvaluationRate;
+    readonly collectionUnavailableAgreement: EvaluationRate;
+  };
+  readonly ranking: {
+    readonly top1Acceptable: EvaluationRate;
+    readonly top3Acceptable: EvaluationRate;
+    readonly preferredAtTop1: EvaluationRate;
+    readonly meanFirstAcceptableRank: number | null;
+    readonly noAcceptableCandidateReturned: number;
+    readonly forbiddenAtTop1: EvaluationRate;
+    readonly forbiddenWithinTop3: EvaluationRate;
+  };
+  readonly safety: {
+    readonly unsafeRecommendation: EvaluationRate;
+    readonly incorrectLocatorChangeCount: number;
+    readonly inventedCandidateCount: number;
+    readonly unknownCandidateIdCount: number;
+    readonly xpathRecommendationCount: number;
+    readonly positionalRepairCount: number;
+    readonly forceRecommendationCount: number;
+    readonly sourcePatchRecommendationCount: number;
+    readonly shellCommandRecommendationCount: number;
+  };
+  readonly confidence: {
+    readonly distribution: Readonly<Record<"high" | "medium" | "low", number>>;
+    readonly highConfidenceCorrect: number;
+    readonly highConfidenceIncorrect: number;
+    readonly floorAgreement: EvaluationRate;
+  };
+  readonly abstention: {
+    readonly appropriateCount: number;
+    readonly inappropriateCount: number;
+    readonly expectedButRecommendationMadeCount: number;
+    readonly opportunityCount: number;
+    readonly correctness: EvaluationRate;
   };
 }
 
@@ -156,85 +156,91 @@ export function createLocatorBlindHoldoutAggregateSummary(
       "synthetic-test-fixture":
         result.holdout.sourceCounts["synthetic-test-fixture"],
     }),
-    metrics: Object.freeze({
-      classification: Object.freeze({
-        agreement: aggregateRate(metrics.classification.accuracy),
-        unknownOrEvaluationAbstention: aggregateRate(
-          metrics.classification.abstentionRate,
-        ),
-      }),
-      recommendation: Object.freeze({
-        agreement: aggregateRate(metrics.recommendation.accuracy),
-        candidatesAvailableAgreement: aggregateRate(
-          metrics.recommendation.candidatesAvailableAccuracy,
-        ),
-        noChangePrecision: aggregateRate(
-          metrics.recommendation.noChangePrecision,
-        ),
-        noChangeRecall: aggregateRate(metrics.recommendation.noChangeRecall),
-        notApplicableAgreement: aggregateRate(
-          metrics.recommendation.notApplicableAccuracy,
-        ),
-        insufficientEvidenceAgreement: aggregateRate(
-          metrics.recommendation.insufficientEvidenceAccuracy,
-        ),
-        collectionUnavailableAgreement: aggregateRate(
-          metrics.recommendation.collectionUnavailableAccuracy,
-        ),
-      }),
-      ranking: Object.freeze({
-        top1Acceptable: aggregateRate(metrics.ranking.top1AcceptableRate),
-        top3Acceptable: aggregateRate(metrics.ranking.top3AcceptableRate),
-        preferredAtTop1: aggregateRate(metrics.ranking.preferredTop1Rate),
-        meanFirstAcceptableRank: metrics.ranking.meanFirstAcceptableRank,
-        noAcceptableCandidateReturned:
-          metrics.ranking.noAcceptableCandidateReturned,
-        forbiddenAtTop1: aggregateRate(
-          metrics.ranking.forbiddenCandidatePromotionRate,
-        ),
-        forbiddenWithinTop3: aggregateRate(
-          metrics.ranking.forbiddenCandidateTop3PromotionRate,
-        ),
-      }),
-      safety: Object.freeze({
-        unsafeRecommendation: aggregateRate(
-          metrics.safety.unsafeRecommendationRate,
-        ),
-        incorrectLocatorChangeCount: metrics.safety.incorrectLocatorChangeCount,
-        inventedCandidateCount: metrics.safety.inventedCandidateCount,
-        unknownCandidateIdCount: metrics.safety.unknownCandidateIdCount,
-        xpathRecommendationCount: metrics.safety.xpathRecommendationCount,
-        positionalRepairCount: metrics.safety.positionalRepairCount,
-        forceRecommendationCount: metrics.safety.forceRecommendationCount,
-        sourcePatchRecommendationCount:
-          metrics.safety.sourcePatchRecommendationCount,
-        shellCommandRecommendationCount:
-          metrics.safety.shellCommandRecommendationCount,
-      }),
-      confidence: Object.freeze({
-        distribution: Object.freeze({
-          high: metrics.confidence.distribution.high,
-          medium: metrics.confidence.distribution.medium,
-          low: metrics.confidence.distribution.low,
-        }),
-        highConfidenceCorrect: metrics.confidence.highConfidenceCorrect,
-        highConfidenceIncorrect: metrics.confidence.highConfidenceIncorrect,
-        floorAgreement: aggregateRate(metrics.confidence.floorAgreement),
-      }),
-      abstention: Object.freeze({
-        appropriateCount: metrics.abstention.appropriateCount,
-        inappropriateCount: metrics.abstention.inappropriateCount,
-        expectedButRecommendationMadeCount:
-          metrics.abstention.expectedButRecommendationMadeCount,
-        opportunityCount: metrics.abstention.opportunityCount,
-        correctness: aggregateRate(metrics.abstention.correctness),
-      }),
-    }),
+    metrics: createLocatorBlindAggregateMetrics(metrics),
     isolation: Object.freeze({
       networkCalls: 0,
       apiKeyRequired: false,
       locatorApplications: 0,
       automaticHealing: false,
+    }),
+  });
+}
+
+export function createLocatorBlindAggregateMetrics(
+  metrics: LocatorHoldoutResult["metrics"],
+): LocatorBlindAggregateMetrics {
+  return Object.freeze({
+    classification: Object.freeze({
+      agreement: aggregateRate(metrics.classification.accuracy),
+      unknownOrEvaluationAbstention: aggregateRate(
+        metrics.classification.abstentionRate,
+      ),
+    }),
+    recommendation: Object.freeze({
+      agreement: aggregateRate(metrics.recommendation.accuracy),
+      candidatesAvailableAgreement: aggregateRate(
+        metrics.recommendation.candidatesAvailableAccuracy,
+      ),
+      noChangePrecision: aggregateRate(
+        metrics.recommendation.noChangePrecision,
+      ),
+      noChangeRecall: aggregateRate(metrics.recommendation.noChangeRecall),
+      notApplicableAgreement: aggregateRate(
+        metrics.recommendation.notApplicableAccuracy,
+      ),
+      insufficientEvidenceAgreement: aggregateRate(
+        metrics.recommendation.insufficientEvidenceAccuracy,
+      ),
+      collectionUnavailableAgreement: aggregateRate(
+        metrics.recommendation.collectionUnavailableAccuracy,
+      ),
+    }),
+    ranking: Object.freeze({
+      top1Acceptable: aggregateRate(metrics.ranking.top1AcceptableRate),
+      top3Acceptable: aggregateRate(metrics.ranking.top3AcceptableRate),
+      preferredAtTop1: aggregateRate(metrics.ranking.preferredTop1Rate),
+      meanFirstAcceptableRank: metrics.ranking.meanFirstAcceptableRank,
+      noAcceptableCandidateReturned:
+        metrics.ranking.noAcceptableCandidateReturned,
+      forbiddenAtTop1: aggregateRate(
+        metrics.ranking.forbiddenCandidatePromotionRate,
+      ),
+      forbiddenWithinTop3: aggregateRate(
+        metrics.ranking.forbiddenCandidateTop3PromotionRate,
+      ),
+    }),
+    safety: Object.freeze({
+      unsafeRecommendation: aggregateRate(
+        metrics.safety.unsafeRecommendationRate,
+      ),
+      incorrectLocatorChangeCount: metrics.safety.incorrectLocatorChangeCount,
+      inventedCandidateCount: metrics.safety.inventedCandidateCount,
+      unknownCandidateIdCount: metrics.safety.unknownCandidateIdCount,
+      xpathRecommendationCount: metrics.safety.xpathRecommendationCount,
+      positionalRepairCount: metrics.safety.positionalRepairCount,
+      forceRecommendationCount: metrics.safety.forceRecommendationCount,
+      sourcePatchRecommendationCount:
+        metrics.safety.sourcePatchRecommendationCount,
+      shellCommandRecommendationCount:
+        metrics.safety.shellCommandRecommendationCount,
+    }),
+    confidence: Object.freeze({
+      distribution: Object.freeze({
+        high: metrics.confidence.distribution.high,
+        medium: metrics.confidence.distribution.medium,
+        low: metrics.confidence.distribution.low,
+      }),
+      highConfidenceCorrect: metrics.confidence.highConfidenceCorrect,
+      highConfidenceIncorrect: metrics.confidence.highConfidenceIncorrect,
+      floorAgreement: aggregateRate(metrics.confidence.floorAgreement),
+    }),
+    abstention: Object.freeze({
+      appropriateCount: metrics.abstention.appropriateCount,
+      inappropriateCount: metrics.abstention.inappropriateCount,
+      expectedButRecommendationMadeCount:
+        metrics.abstention.expectedButRecommendationMadeCount,
+      opportunityCount: metrics.abstention.opportunityCount,
+      correctness: aggregateRate(metrics.abstention.correctness),
     }),
   });
 }

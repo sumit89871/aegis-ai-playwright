@@ -119,6 +119,39 @@ await describe("AI foundation security invariants", async () => {
     );
   });
 
+  await it("keeps advisory reranking opt-in, bounded, and absent from CI", () => {
+    const reranker = read(
+      "packages/core/src/locator-diagnosis/locator-advisory-reranking.ts",
+    );
+    const prompt = read(
+      "packages/core/src/locator-diagnosis/locator-advisory-reranking-prompt.ts",
+    );
+    const comparison = read(
+      "packages/core/src/locator-observations/locator-advisory-comparison.ts",
+    );
+    const command = read("scripts/locator-blind-holdout-compare.ts");
+    const rootPackage = read("package.json");
+    const workflows = `${read(".github/workflows/framework-ci.yml")}\n${read(".github/workflows/reference-consumer-ci.yml")}`;
+    assert.match(command, /--confirm-network/u);
+    assert.match(command, /maxOutputTokens:\s*512/u);
+    assert.match(command, /requestTimeoutMs:\s*15_000/u);
+    assert.match(command, /maxEstimatedCostUsd:\s*0\.01/u);
+    assert.match(prompt, /Rank only candidate IDs supplied/u);
+    assert.doesNotMatch(
+      reranker,
+      /expectedClassification|expectedRecommendationStatus|acceptableCandidateIds|preferredCandidateIds|forbiddenCandidateIds|reviewerRationale|deterministicScore|originalCandidateId/u,
+    );
+    assert.doesNotMatch(
+      `${reranker}\n${comparison}`,
+      /click\(|fill\(|press\(|applyLocator|retryWithCandidate|child_process|execSync|spawnSync/u,
+    );
+    assert.doesNotMatch(
+      rootPackage,
+      /"ci:framework":\s*"[^"]*ai:locator:holdout:compare/u,
+    );
+    assert.doesNotMatch(workflows, /ai:locator:holdout:compare/u);
+  });
+
   await it("attaches locator reports only after an unexpected failure", () => {
     const fixture = read("examples/nopcommerce/src/fixtures/test-fixtures.ts");
     const failureGuard = fixture.indexOf(

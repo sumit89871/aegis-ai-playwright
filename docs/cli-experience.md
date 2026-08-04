@@ -42,3 +42,9 @@ Transient progress uses stderr. Permanent reports and summaries use stdout. `--s
 Colors and symbols supplement semantic text; they never replace it. Screen readers and plain logs retain explicit labels. Emoji are used for transient progress and standalone completion messages, not aligned metric columns. ANSI-aware terminal-cell measurement prevents emoji, Unicode, and styled text from shifting panels or animation frames.
 
 Animation is presentation only. `💭` does not imply an AI call, and no progress style authorizes locator application, source changes, replay, retries, or healing.
+
+## Advisory comparison progress
+
+The locator advisory comparison consumes the same presentation API. Live mode reports only truthful work stages: loading eligible packets, preparing sanitized evidence, requesting advisory reranking, validating structured responses, loading independent human answers afterward, comparing rankings, calculating aggregate deltas, and writing privacy-safe reports. Deterministic and mock modes never claim a live provider request.
+
+Transient stages remain stderr-only and stop before the permanent stdout report. `--summary-json`, `--plain`, CI, `TERM=dumb`, and redirected execution remain free of animation. The normal 400 ms delayed start is unchanged, so a fast comparison can complete without showing progress. Presentation does not change any deterministic or advisory metric.

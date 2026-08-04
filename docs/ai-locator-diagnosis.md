@@ -51,3 +51,11 @@ Passing this controlled benchmark supports continued shadow-mode review; it does
 ## Shadow observations
 
 Applicable `locator-diagnosis.json` attachments can be imported into a bounded, host-free observation. Screenshots, traces, HTML, form values, URLs, and secrets are not copied. Because the observation still contains the diagnosis and score-ranked IDs, its legacy review is pilot/calibration evidence. Independent holdout review uses a separate redacted packet with neutral aliases; expected answers never enter diagnosis input. See [Locator shadow observations](locator-shadow-observations.md).
+
+## Deterministic versus advisory reranking
+
+Fixed TypeScript scoring remains the default baseline. It is predictable and auditable, but lexical scoring can miss semantic equivalence such as “Saved items” and “Wishlist”. The optional advisory comparison asks an LLM only whether a bounded supplied inventory contains a useful replacement and how those supplied aliases should be ordered. Classification remains deterministic, and AI cannot generate selectors or Playwright code.
+
+The provider input is built from the blind reviewer packet without loading its review or private mapping. Original `LOCATOR-*` IDs, deterministic ordering/scores/stability/rationale, and human expected classification, recommendation, acceptable/preferred/forbidden sets, confidence floor, and rationale are excluded. A concise versioned prompt requires semantic and operation compatibility, uniqueness, visibility, enablement, editability for fill operations, and abstention when evidence is weak. Output schema `1.0.0` accepts only supported recommendation statuses, supplied neutral IDs, supported confidence, and a bounded sanitized summary; invented/duplicate IDs, unknown fields, prohibited repairs, patches, commands, and unsafe text are rejected.
+
+Run the offline comparison with `npm run ai:locator:holdout:compare -- --mode=mock-ai`. Live OpenRouter execution requires `--mode=ai-advisory --confirm-network` and the existing secure configuration. Failed or invalid cases reduce advisory coverage instead of receiving a disguised deterministic fallback. Side-by-side aggregates do not reveal cases, IDs, prompts, raw responses, or human answers. They remain advisory evidence only and never apply a locator.

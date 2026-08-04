@@ -85,6 +85,22 @@ Top-1 and top-3 acceptable rates show whether a human-approved candidate was sug
 
 These deterministic metrics must be understood before an AI-reranking comparison. They never authorize locator application, replay, retries, source changes, or automatic healing.
 
+## Advisory reranking comparison
+
+The comparison runner preserves the existing deterministic result and evaluates the same eligible blind cases through an optional second phase. Before any human answer is loaded, a validated blind packet is explicitly mapped to bounded AI evidence. Its already neutral, reproducible aliases and order prevent `LOCATOR-001` rank anchoring. The provider sees target intent, sanitized failure/readiness state, collection status, and safe candidate facts; it never sees the original IDs, mapping, deterministic score/rank/rationale, or completed review.
+
+```text
+npm run ai:locator:holdout:compare
+npm run ai:locator:holdout:compare -- --mode=mock-ai
+npm run ai:locator:holdout:compare -- --mode=mock-ai --summary-json
+npm run ai:locator:holdout:compare -- --mode=mock-ai --plain
+npm run ai:locator:holdout:compare -- --mode=ai-advisory --confirm-network
+```
+
+The default is deterministic-only. Mock mode makes zero network calls and needs no key. Live mode is local-only, reuses the OpenRouter adapter, and requires explicit enablement, network consent, model, key, and pricing configuration. It is absent from tests and CI. Public terminal output, ignored Markdown, and safe summary JSON show only aggregate deterministic/advisory metrics, direction-aware deltas, provider request coverage/usage, and isolation guarantees. They never contain prompts, raw responses, case IDs, candidate IDs, mappings, per-case answers, or rationale.
+
+Provider failure, timeout, rate limiting, and rejected structured output are reported as unavailable or partial coverage. Those cases are excluded from AI-specific denominators; deterministic results remain visible but are not relabelled as AI results. Higher is better for agreement, acceptable/preferred ranking, and confidence-floor metrics. Lower is better for forbidden promotion, unsafe recommendations, invented IDs, prohibited output, and high-confidence mistakes. `N/A` remains `N/A` when no denominator exists. Five cases remain insufficient for a production claim, and no apparent delta authorizes replay or healing.
+
 ## Terminal output modes
 
 The normal command chooses rich output only when stdout is an interactive terminal, CI is absent, `TERM` is not `dumb`, and the terminal is at least 72 columns wide. Terminals at 80 columns and above receive bordered panels; 72–79 columns receive compact rich headings. Narrower terminals use plain output. Rendering is capped at 140 columns so a very wide terminal remains easy to scan. Rich output groups status, eligibility, diagnosis, recommendation, ranking, safety, confidence, abstention, isolation, interpretation, and elapsed time. Each section calculates one label width, and wrapped values align beneath their value rather than repeating labels or status markers. Labels accompany every color and symbol so color is never the only signal.
