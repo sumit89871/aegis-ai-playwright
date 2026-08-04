@@ -7,6 +7,7 @@ import {
   createCliProgressReporter,
   createLocatorBlindHoldoutAggregateSummary,
   detectTerminalCapabilities,
+  isCliPresentationArgument,
   inspectLocatorBlindReview,
   renderCliError,
   renderLocatorBlindHoldoutAggregateMarkdown,
@@ -16,8 +17,10 @@ import {
   validateLocatorBlindReviewPacket,
   validateLocatorObservation,
   validateLocatorObservationReview,
+  validateCliPresentationArguments,
 } from "@aegis/core";
 import type {
+  CliOptionError,
   LocatorBlindCandidateMapping,
   LocatorBlindHoldoutRecord,
   LocatorBlindReview,
@@ -43,21 +46,19 @@ const progress = createCliProgressReporter({
 const startedAt = performance.now();
 
 function validateArguments(): void {
+  validateCliPresentationArguments(arguments_);
   if (
     arguments_.some(
       (entry) =>
         entry !== "--json" &&
         entry !== "--summary-json" &&
-        entry !== "--plain" &&
-        entry !== "--no-animation" &&
+        !isCliPresentationArgument(entry) &&
         entry !== "--mode=mock-ai" &&
         entry !== "--mode=deterministic-only" &&
         !entry.startsWith("--root="),
     )
   )
     throw new Error("Unsupported blind holdout option.");
-  if (arguments_.includes("--json") && arguments_.includes("--summary-json"))
-    throw new Error("Choose either --json or --summary-json, not both.");
 }
 
 async function run(): Promise<void> {
@@ -218,19 +219,38 @@ const interruptSignal = (): void => {
 const terminateSignal = (): void => {
   interrupt(143);
 };
+const exitCleanup = (): void => {
+  progress.dispose();
+};
 process.once("SIGINT", interruptSignal);
 process.once("SIGTERM", terminateSignal);
+process.once("exit", exitCleanup);
 try {
   await run();
-} catch {
+} catch (caught) {
   progress.fail();
+  const optionError = caught as Partial<CliOptionError>;
   const error = {
     status: "error",
     error: {
-      code: "CLI_EXECUTION_FAILED",
-      message: "The blind holdout command could not complete safely.",
+      code:
+        optionError.name === "CliOptionError"
+          ? (optionError.code ?? "CLI_OPTION_INVALID")
+          : "CLI_EXECUTION_FAILED",
+      option:
+        optionError.name === "CliOptionError" ? optionError.option : undefined,
+      message:
+        optionError.name === "CliOptionError"
+          ? (optionError.message ?? "The terminal option is invalid.")
+          : "The blind holdout command could not complete safely.",
       suggestion:
-        "Check the command options and validate the ignored blind-review artifacts before retrying.",
+        optionError.name === "CliOptionError"
+          ? (optionError.suggestion ?? "Choose a supported option.")
+          : "Check the command options and validate the ignored blind-review artifacts before retrying.",
+      allowedValues:
+        optionError.name === "CliOptionError"
+          ? optionError.allowedValues
+          : undefined,
     },
   } as const;
   if (
@@ -244,8 +264,16 @@ try {
         {
           title: "Blind holdout evaluation failed",
           code: error.error.code,
+          ...(error.error.option === undefined
+            ? {}
+            : { fieldPath: error.error.option }),
           message: error.error.message,
-          suggestion: error.error.suggestion,
+          suggestion: `${error.error.suggestion}${
+            error.error.allowedValues === undefined ||
+            error.error.allowedValues.length === 0
+              ? ""
+              : ` Supported: ${error.error.allowedValues.join(", ")}.`
+          }`,
         },
         capabilities,
       )}\n`,
@@ -254,5 +282,6 @@ try {
 } finally {
   process.removeListener("SIGINT", interruptSignal);
   process.removeListener("SIGTERM", terminateSignal);
+  process.removeListener("exit", exitCleanup);
   progress.dispose();
 }

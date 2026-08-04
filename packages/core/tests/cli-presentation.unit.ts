@@ -2,19 +2,36 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  ANSI_BRIGHT,
+  ANSI_DIM,
+  ANSI_NORMAL,
+  ANSI_RESET,
   CLI_MAXIMUM_RENDER_WIDTH,
   CLI_MINIMUM_BORDERED_WIDTH,
+  CLI_ASCII_PROGRESS_SYMBOL,
   CLI_PROGRESS_DELAY_MS,
+  CLI_PROGRESS_REFRESH_MS,
+  CLI_THINKING_EMOJI,
+  CLI_UNICODE_PROGRESS_SYMBOL,
+  THINKING_BRIGHTNESS_FRAMES,
+  CliOptionError,
+  cliProgressSymbol,
+  cliStatusSymbol,
   createCliProgressReporter,
   createLocatorBlindHoldoutAggregateSummary,
   detectTerminalCapabilities,
+  padToWidth,
   renderCliError,
   renderCliNotice,
   renderCliSection,
   renderLocatorBlindHoldoutTerminal,
   runLocatorBlindHoldoutEvaluation,
   stripAnsi,
+  splitAtVisibleWidth,
+  truncateToWidth,
   usesBorderedCliLayout,
+  validateCliPresentationArguments,
+  visibleWidth,
   wrapCliText,
 } from "../src/index.ts";
 import type {
@@ -53,6 +70,7 @@ async function emptySummary(): Promise<LocatorBlindHoldoutAggregateSummary> {
 
 class FakeScheduler implements CliProgressScheduler {
   public currentTime = 0;
+  public unrefCount = 0;
   private nextId = 1;
   private readonly timeouts = new Map<
     number,
@@ -89,6 +107,9 @@ class FakeScheduler implements CliProgressScheduler {
   };
   public readonly clearInterval = (handle: unknown): void => {
     this.intervals.delete(Number(handle));
+  };
+  public readonly unref = (): void => {
+    this.unrefCount += 1;
   };
 
   public advance(milliseconds: number): void {
@@ -188,6 +209,92 @@ await describe("terminal capability detection", async () => {
     const windows = capabilities({ platform: "win32" });
     assert.equal(windows.rich, true);
     assert.equal(windows.unicode, false);
+  });
+
+  await it("detects emoji, Unicode, ANSI, colour, and animation independently", () => {
+    const windowsTerminal = capabilities({
+      platform: "win32",
+      environment: { WT_SESSION: "opaque-session", NO_COLOR: "1" },
+    });
+    assert.equal(windowsTerminal.windowsTerminal, true);
+    assert.equal(windowsTerminal.progressStyle, "thinking");
+    assert.equal(windowsTerminal.symbolMode, "emoji");
+    assert.equal(windowsTerminal.emoji, true);
+    assert.equal(windowsTerminal.unicode, true);
+    assert.equal(windowsTerminal.ansi, true);
+    assert.equal(windowsTerminal.brightness, true);
+    assert.equal(windowsTerminal.color, false);
+    assert.equal(windowsTerminal.animation, true);
+
+    const forceColorOff = capabilities({
+      platform: "win32",
+      environment: { WT_SESSION: "opaque-session", FORCE_COLOR: "0" },
+    });
+    assert.equal(forceColorOff.color, false);
+    assert.equal(forceColorOff.emoji, true);
+    assert.equal(forceColorOff.unicode, true);
+  });
+
+  await it("selects explicit emoji, Unicode, ASCII, and static modes", () => {
+    assert.equal(capabilities({ arguments: ["--emoji"] }).symbolMode, "emoji");
+    assert.equal(
+      capabilities({ arguments: ["--no-emoji"] }).symbolMode,
+      "unicode",
+    );
+    assert.equal(capabilities({ arguments: ["--ascii"] }).symbolMode, "ascii");
+    assert.equal(
+      capabilities({ arguments: ["--unicode"] }).symbolMode,
+      "unicode",
+    );
+    assert.equal(
+      capabilities({ arguments: ["--progress-style=spinner"] }).progressStyle,
+      "spinner",
+    );
+    assert.equal(
+      capabilities({ arguments: ["--progress-style=static"] }).animation,
+      false,
+    );
+  });
+
+  await it("uses conservative legacy Windows and non-human fallbacks", () => {
+    const legacy = capabilities({ platform: "win32" });
+    assert.equal(legacy.windowsTerminal, false);
+    assert.equal(legacy.ansi, false);
+    assert.equal(legacy.unicode, false);
+    assert.equal(legacy.symbolMode, "ascii");
+    for (const terminal of [
+      capabilities({ environment: { CI: "true" } }),
+      capabilities({ environment: { TERM: "dumb" } }),
+      capabilities({ stdoutIsTty: false }),
+      capabilities({ stderrIsTty: false }),
+      capabilities({ arguments: ["--plain"] }),
+      capabilities({ arguments: ["--summary-json"] }),
+      capabilities({ arguments: ["--json"] }),
+    ])
+      assert.equal(terminal.animation, false);
+  });
+
+  await it("rejects unsupported styles and conflicting presentation options", () => {
+    for (const [arguments_, code] of [
+      [["--progress-style=blink"], "CLI_PROGRESS_STYLE_UNSUPPORTED"],
+      [["--progress-style="], "CLI_PROGRESS_STYLE_UNSUPPORTED"],
+      [["--unicode", "--ascii"], "CLI_SYMBOL_MODE_CONFLICT"],
+      [["--emoji", "--no-emoji"], "CLI_EMOJI_MODE_CONFLICT"],
+      [["--ascii", "--emoji"], "CLI_ASCII_EMOJI_CONFLICT"],
+      [["--json", "--plain"], "CLI_JSON_HUMAN_OPTION_CONFLICT"],
+    ] as const) {
+      assert.throws(
+        () => {
+          validateCliPresentationArguments(arguments_);
+        },
+        (error: unknown) =>
+          error instanceof CliOptionError && error.code === code,
+      );
+    }
+    for (const style of ["thinking", "spinner", "static"])
+      assert.doesNotThrow(() => {
+        validateCliPresentationArguments([`--progress-style=${style}`]);
+      });
   });
 });
 
@@ -404,22 +511,77 @@ await describe("terminal rendering", async () => {
   });
 });
 
+await describe("terminal-cell width", async () => {
+  await it("ignores ANSI and measures supported symbols by terminal cells", () => {
+    assert.equal(visibleWidth(`${ANSI_DIM}message${ANSI_RESET}`), 7);
+    assert.equal(visibleWidth(CLI_THINKING_EMOJI), 2);
+    assert.equal(visibleWidth("✅"), 2);
+    assert.equal(visibleWidth(CLI_UNICODE_PROGRESS_SYMBOL), 1);
+    assert.equal(visibleWidth(CLI_ASCII_PROGRESS_SYMBOL), 3);
+  });
+
+  await it("truncates without breaking emoji, surrogate pairs, or ANSI state", () => {
+    const styled = `${ANSI_BRIGHT}ab${CLI_THINKING_EMOJI}cd${ANSI_RESET}`;
+    const truncated = truncateToWidth(styled, 4);
+    assert.equal(visibleWidth(truncated), 4);
+    assert.match(truncated, /💭/u);
+    assert.ok(truncated.endsWith(ANSI_RESET));
+    assert.equal(truncated.includes("\uFFFD"), false);
+    assert.equal(stripAnsi(truncateToWidth("A💭B", 2)), "A");
+    assert.deepEqual(splitAtVisibleWidth("A💭B", 3), ["A💭", "B"]);
+  });
+
+  await it("pads styled and emoji text to one stable visible width", () => {
+    for (const value of [
+      `${ANSI_DIM}Working...${ANSI_RESET}`,
+      `${ANSI_NORMAL}Working...${ANSI_RESET}`,
+      `${ANSI_BRIGHT}Working...${ANSI_RESET}`,
+      `${CLI_THINKING_EMOJI} Working...`,
+    ])
+      assert.equal(visibleWidth(padToWidth(value, 30)), 30);
+  });
+});
+
 await describe("delayed CLI progress", async () => {
-  function fixture(animation = true): {
+  function fixture(
+    options: {
+      readonly arguments?: readonly string[];
+      readonly environment?: Readonly<Record<string, string | undefined>>;
+      readonly platform?: NodeJS.Platform;
+      readonly animation?: boolean;
+      readonly brightness?: boolean;
+      readonly stderrIsTty?: boolean;
+    } = {},
+  ): {
     readonly scheduler: FakeScheduler;
     readonly writes: string[];
     readonly reporter: ReturnType<typeof createCliProgressReporter>;
   } {
     const scheduler = new FakeScheduler();
     const writes: string[] = [];
+    const detected = capabilities({
+      ...(options.arguments === undefined
+        ? {}
+        : { arguments: options.arguments }),
+      ...(options.environment === undefined
+        ? {}
+        : { environment: options.environment }),
+      ...(options.platform === undefined ? {} : { platform: options.platform }),
+      ...(options.stderrIsTty === undefined
+        ? {}
+        : { stderrIsTty: options.stderrIsTty }),
+    });
     const reporter = createCliProgressReporter({
       capabilities: {
-        ...capabilities(),
-        animation,
+        ...detected,
+        animation: options.animation ?? detected.animation,
+        brightness: options.brightness ?? detected.brightness,
       },
-      stream: { isTTY: true, write: (value) => writes.push(value) },
+      stream: {
+        isTTY: options.stderrIsTty ?? true,
+        write: (value) => writes.push(value),
+      },
       scheduler,
-      intervalMs: 80,
     });
     return { scheduler, writes, reporter };
   }
@@ -434,36 +596,99 @@ await describe("delayed CLI progress", async () => {
     assert.equal(CLI_PROGRESS_DELAY_MS, 400);
   });
 
-  await it("animates on stderr-compatible streams and restores the cursor", () => {
+  await it("uses the exact looping brightness sequence on one stable line", () => {
+    const { scheduler, writes, reporter } = fixture({
+      platform: "win32",
+      environment: { WT_SESSION: "opaque-session" },
+    });
+    reporter.start("Validating blind review integrity");
+    scheduler.advance(CLI_PROGRESS_DELAY_MS);
+    for (
+      let index = 1;
+      index < THINKING_BRIGHTNESS_FRAMES.length + 1;
+      index += 1
+    )
+      scheduler.advance(CLI_PROGRESS_REFRESH_MS);
+    reporter.succeed();
+    const frames = writes.filter((entry) => entry.includes("Validating"));
+    assert.equal(frames.length, THINKING_BRIGHTNESS_FRAMES.length + 1);
+    const styles = frames.map((entry) =>
+      THINKING_BRIGHTNESS_FRAMES.find((style) =>
+        entry.includes(`${CLI_THINKING_EMOJI} ${style}`),
+      ),
+    );
+    assert.deepEqual(styles.slice(0, 6), [
+      ANSI_DIM,
+      ANSI_NORMAL,
+      ANSI_BRIGHT,
+      ANSI_NORMAL,
+      ANSI_DIM,
+      ANSI_NORMAL,
+    ]);
+    assert.equal(styles[6], ANSI_DIM);
+    assert.equal(
+      THINKING_BRIGHTNESS_FRAMES.join("").includes("\u001B[5m"),
+      false,
+    );
+    assert.ok(frames.every((entry) => entry.includes(ANSI_RESET)));
+    assert.ok(frames.every((entry) => entry.startsWith("\r")));
+    assert.ok(frames.every((entry) => !entry.includes("\n")));
+    assert.ok(frames.every((entry) => visibleWidth(entry) === 100));
+    assert.equal(new Set(frames.map((entry) => visibleWidth(entry))).size, 1);
+    assert.equal(
+      frames.every(
+        (entry) =>
+          entry.indexOf(CLI_THINKING_EMOJI) < entry.indexOf(ANSI_DIM) ||
+          !entry.includes(ANSI_DIM),
+      ),
+      true,
+    );
+    assert.ok(writes.join("").endsWith("\u001B[?25h"));
+    assert.equal(CLI_PROGRESS_REFRESH_MS, 150);
+  });
+
+  await it("updates stage text while pulsing and prevents writes after success", () => {
     const { scheduler, writes, reporter } = fixture();
     reporter.start("Loading records");
     scheduler.advance(CLI_PROGRESS_DELAY_MS);
     reporter.update("Validating records");
-    scheduler.advance(80);
-    reporter.succeed();
+    scheduler.advance(CLI_PROGRESS_REFRESH_MS);
+    reporter.succeed("Completed");
+    const writeCount = writes.length;
+    scheduler.advance(1000);
+    reporter.update("Late update");
+    reporter.succeed("Duplicate");
+    assert.equal(writes.length, writeCount);
     const output = writes.join("");
     assert.match(output, /Loading records/u);
     assert.match(output, /Validating records/u);
+    assert.match(output, /✓ Completed/u);
+    assert.doesNotMatch(output, /Late update|Duplicate/u);
     assert.ok(output.includes("\u001B[?25l"));
-    assert.ok(output.endsWith("\u001B[?25h"));
+    assert.ok(output.includes("\u001B[?25h"));
   });
 
-  await it("preserves bounded failure and interruption states", () => {
+  await it("cleans failure and interruption before a bounded completion line", () => {
     for (const method of ["fail", "interrupt"] as const) {
       const { scheduler, writes, reporter } = fixture();
       reporter.start("Evaluating");
       scheduler.advance(CLI_PROGRESS_DELAY_MS);
-      if (method === "fail") reporter.fail();
+      if (method === "fail") reporter.fail("Operation failed.");
       else reporter.interrupt();
       const output = writes.join("");
       assert.ok(output.includes("\u001B[?25h"));
-      assert.match(output, /\[ERROR\]/u);
+      assert.match(
+        output,
+        method === "fail" ? /✗ Operation failed/u : /⚠ Interrupted/u,
+      );
       assert.doesNotMatch(output, /authorization|secret/iu);
     }
   });
 
   await it("uses static progress without cursor control for no-animation", () => {
-    const { scheduler, writes, reporter } = fixture(false);
+    const { scheduler, writes, reporter } = fixture({
+      arguments: ["--no-animation"],
+    });
     reporter.start("Loading records");
     scheduler.advance(CLI_PROGRESS_DELAY_MS);
     reporter.update("Writing reports");
@@ -472,6 +697,54 @@ await describe("delayed CLI progress", async () => {
     assert.match(output, /\[PROGRESS\] Loading records/u);
     assert.match(output, /\[PROGRESS\] Writing reports/u);
     assert.equal(output.includes("\u001B"), false);
+  });
+
+  await it("preserves explicit spinner and brightness fallback behavior", () => {
+    const spinner = fixture({ arguments: ["--progress-style=spinner"] });
+    spinner.reporter.start("Spinning");
+    spinner.scheduler.advance(CLI_PROGRESS_DELAY_MS);
+    spinner.scheduler.advance(CLI_PROGRESS_REFRESH_MS);
+    spinner.reporter.stop();
+    assert.match(spinner.writes[0] ?? "", /⠋ Spinning/u);
+    assert.match(spinner.writes[1] ?? "", /⠙ Spinning/u);
+
+    const fallback = fixture({ brightness: false });
+    fallback.reporter.start("Fallback");
+    fallback.scheduler.advance(CLI_PROGRESS_DELAY_MS);
+    fallback.reporter.stop();
+    assert.match(fallback.writes[0] ?? "", /⠋ Fallback/u);
+    const fallbackOutput = fallback.writes.join("");
+    for (const brightness of [ANSI_BRIGHT, ANSI_DIM, ANSI_NORMAL])
+      assert.equal(fallbackOutput.includes(brightness), false);
+  });
+
+  await it("keeps symbols and completion hierarchy deterministic", () => {
+    assert.equal(cliProgressSymbol("emoji"), CLI_THINKING_EMOJI);
+    assert.equal(cliProgressSymbol("unicode"), CLI_UNICODE_PROGRESS_SYMBOL);
+    assert.equal(cliProgressSymbol("ascii"), CLI_ASCII_PROGRESS_SYMBOL);
+    assert.equal(cliStatusSymbol("success", "emoji"), "✅");
+    assert.equal(cliStatusSymbol("warning", "emoji"), "⚠️");
+    assert.equal(cliStatusSymbol("failure", "emoji"), "❌");
+    assert.equal(cliStatusSymbol("information", "emoji"), "ℹ️");
+    assert.equal(cliStatusSymbol("success", "unicode"), "✓");
+    assert.equal(cliStatusSymbol("failure", "unicode"), "✗");
+    assert.equal(cliStatusSymbol("success", "ascii"), "[OK]");
+    assert.equal(cliStatusSymbol("not-applicable", "ascii"), "[N/A]");
+  });
+
+  await it("handles starts, pre-start updates, repeated stops, and unref safely", () => {
+    const { scheduler, writes, reporter } = fixture();
+    reporter.update("Ignored before start");
+    reporter.start("First");
+    reporter.start("Second");
+    assert.equal(scheduler.unrefCount, 1);
+    scheduler.advance(CLI_PROGRESS_DELAY_MS);
+    assert.match(writes.join(""), /Second/u);
+    assert.equal(scheduler.unrefCount, 2);
+    reporter.stop();
+    reporter.stop();
+    scheduler.advance(1000);
+    assert.doesNotMatch(writes.join(""), /Ignored before start/u);
   });
 
   await it("does nothing outside an explicitly interactive rich terminal", () => {

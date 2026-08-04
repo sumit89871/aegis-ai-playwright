@@ -1,66 +1,80 @@
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import {
+  CLI_PROGRESS_DELAY_MS,
+  CLI_PROGRESS_REFRESH_MS,
+  CliOptionError,
   createCliProgressReporter,
   detectTerminalCapabilities,
+  isCliPresentationArgument,
   renderCliBanner,
+  renderCliError,
   renderCliNotice,
   renderCliSection,
+  renderCliStatusLine,
+  validateCliPresentationArguments,
 } from "@aegis/core";
+import type { CliProgressReporter, TerminalCapabilities } from "@aegis/core";
 
-const arguments_ = process.argv.slice(2);
-if (
-  arguments_.some((entry) => entry !== "--plain" && entry !== "--no-animation")
-)
-  throw new Error("Supported options are --plain and --no-animation.");
+export const CLI_PROGRESS_DEMO_STAGE_DURATION_MS = 900;
+export const CLI_PROGRESS_DEMO_STAGES = Object.freeze([
+  "Starting CLI progress demonstration",
+  "Loading demonstration data",
+  "Validating terminal rendering",
+  "Rendering thinking animation",
+  "Completing demonstration",
+]);
 
-const capabilities = detectTerminalCapabilities({
-  arguments: arguments_,
-  environment: process.env,
-  stdoutIsTty: process.stdout.isTTY,
-  stderrIsTty: process.stderr.isTTY,
-  columns: process.stdout.columns,
-  platform: process.platform,
-});
-const progress = createCliProgressReporter({
-  capabilities,
-  stream: process.stderr,
-});
-const delay = async (milliseconds: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, milliseconds));
+interface DemoOutputStream {
+  write(value: string): unknown;
+}
 
-const interrupt = (exitCode: number): void => {
-  progress.interrupt();
-  process.exit(exitCode);
-};
-const interruptSignal = (): void => {
-  interrupt(130);
-};
-const terminateSignal = (): void => {
-  interrupt(143);
-};
-process.once("SIGINT", interruptSignal);
-process.once("SIGTERM", terminateSignal);
-
-try {
-  progress.start("Starting the CLI progress demonstration");
-  await delay(500);
-  progress.update("Advancing through a deterministic stage");
-  await delay(450);
-  progress.update("Verifying successful progress cleanup");
-  await delay(450);
-  progress.succeed();
-
-  process.stdout.write(
+export async function runCliProgressDemonstration(options: {
+  readonly capabilities: TerminalCapabilities;
+  readonly progress: CliProgressReporter;
+  readonly stdout: DemoOutputStream;
+  readonly wait?: (milliseconds: number) => Promise<void>;
+}): Promise<void> {
+  const wait =
+    options.wait ??
+    (async (milliseconds: number): Promise<void> =>
+      new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds)));
+  const firstStage = CLI_PROGRESS_DEMO_STAGES[0];
+  if (firstStage !== undefined) options.progress.start(firstStage);
+  for (let index = 0; index < CLI_PROGRESS_DEMO_STAGES.length; index += 1) {
+    await wait(CLI_PROGRESS_DEMO_STAGE_DURATION_MS);
+    const nextStage = CLI_PROGRESS_DEMO_STAGES[index + 1];
+    if (nextStage !== undefined) options.progress.update(nextStage);
+  }
+  options.progress.succeed();
+  options.stdout.write(
     `${[
-      renderCliBanner("AegisAI · CLI Progress Demonstration", capabilities),
+      renderCliStatusLine(
+        "success",
+        "CLI progress demonstration completed",
+        options.capabilities,
+      ),
+      renderCliBanner(
+        "AegisAI · CLI Progress Demonstration",
+        options.capabilities,
+      ),
       renderCliNotice(
         "INFO",
-        "This command demonstrates presentation behavior only. It performs no business evaluation and reads no user artifacts.",
-        capabilities,
+        "This presentation-only command performs no business evaluation, artifact access, browser work, AI call, locator application, or healing.",
+        options.capabilities,
       ),
       renderCliSection(
         "Demonstration result",
         [
-          { label: "Lifecycle", value: "start, update, success" },
+          {
+            label: "Progress style",
+            value: options.capabilities.progressStyle,
+          },
+          {
+            label: "Symbol mode",
+            value: options.capabilities.symbolMode,
+          },
           { label: "Network calls", value: "0", status: "success" },
           { label: "User artifacts", value: "not accessed", status: "success" },
           {
@@ -69,18 +83,136 @@ try {
             status: "success",
           },
         ],
-        capabilities,
+        options.capabilities,
       ),
     ].join("\n\n")}\n`,
   );
-} catch {
-  progress.fail();
-  process.stderr.write(
-    "[ERROR] The CLI progress demonstration could not complete safely.\n",
-  );
-  process.exitCode = 1;
-} finally {
-  process.removeListener("SIGINT", interruptSignal);
-  process.removeListener("SIGTERM", terminateSignal);
-  progress.dispose();
 }
+
+function terminalDiagnostic(capabilities: TerminalCapabilities): string {
+  return renderCliSection(
+    "Safe terminal diagnostic",
+    [
+      { label: "stdout TTY", value: String(capabilities.stdoutIsTty) },
+      { label: "stderr TTY", value: String(capabilities.stderrIsTty) },
+      { label: "Terminal width", value: String(capabilities.width) },
+      { label: "CI", value: String(capabilities.ci) },
+      { label: "TERM dumb", value: String(capabilities.termDumb) },
+      {
+        label: "Windows Terminal",
+        value: String(capabilities.windowsTerminal),
+      },
+      { label: "Output mode", value: capabilities.outputMode },
+      { label: "Symbol mode", value: capabilities.symbolMode },
+      { label: "Emoji mode", value: capabilities.emojiMode },
+      { label: "Progress style", value: capabilities.progressStyle },
+      { label: "Progress symbol class", value: capabilities.symbolMode },
+      { label: "Animation enabled", value: String(capabilities.animation) },
+      { label: "Colour enabled", value: String(capabilities.color) },
+      {
+        label: "ANSI brightness",
+        value: String(capabilities.brightness),
+      },
+      { label: "Delayed start", value: `${String(CLI_PROGRESS_DELAY_MS)} ms` },
+      { label: "Refresh", value: `${String(CLI_PROGRESS_REFRESH_MS)} ms` },
+    ],
+    capabilities,
+  );
+}
+
+async function main(): Promise<void> {
+  const arguments_ = process.argv.slice(2);
+  const capabilities = detectTerminalCapabilities({
+    arguments: arguments_,
+    environment: process.env,
+    stdoutIsTty: process.stdout.isTTY,
+    stderrIsTty: process.stderr.isTTY,
+    columns: process.stdout.columns,
+    platform: process.platform,
+  });
+  const progress = createCliProgressReporter({
+    capabilities,
+    stream: process.stderr,
+  });
+  const interrupt = (exitCode: number): void => {
+    progress.interrupt();
+    process.exit(exitCode);
+  };
+  const interruptSignal = (): void => {
+    interrupt(130);
+  };
+  const terminateSignal = (): void => {
+    interrupt(143);
+  };
+  const exitCleanup = (): void => {
+    progress.dispose();
+  };
+  process.once("SIGINT", interruptSignal);
+  process.once("SIGTERM", terminateSignal);
+  process.once("exit", exitCleanup);
+  try {
+    validateCliPresentationArguments(arguments_);
+    const unsupported = arguments_.find(
+      (entry) =>
+        entry !== "--diagnose-terminal" && !isCliPresentationArgument(entry),
+    );
+    if (unsupported !== undefined)
+      throw new CliOptionError(
+        "CLI_OPTION_UNSUPPORTED",
+        unsupported,
+        "The CLI progress demonstration does not support this option.",
+        "Use a documented progress, symbol, animation, or diagnostic option.",
+      );
+    if (arguments_.includes("--diagnose-terminal")) {
+      process.stdout.write(`${terminalDiagnostic(capabilities)}\n`);
+      return;
+    }
+    await runCliProgressDemonstration({
+      capabilities,
+      progress,
+      stdout: process.stdout,
+    });
+  } catch (caught) {
+    progress.fail();
+    const optionError = caught as Partial<CliOptionError>;
+    process.stderr.write(
+      `${renderCliError(
+        {
+          title: "CLI progress demonstration failed",
+          code:
+            optionError.name === "CliOptionError"
+              ? (optionError.code ?? "CLI_OPTION_INVALID")
+              : "CLI_DEMO_FAILED",
+          ...(optionError.name === "CliOptionError" &&
+          optionError.option !== undefined
+            ? { fieldPath: optionError.option }
+            : {}),
+          message:
+            optionError.name === "CliOptionError"
+              ? (optionError.message ?? "The terminal option is invalid.")
+              : "The presentation-only demonstration could not complete safely.",
+          suggestion:
+            optionError.name === "CliOptionError"
+              ? `${optionError.suggestion ?? "Choose a supported option."}${
+                  optionError.allowedValues === undefined ||
+                  optionError.allowedValues.length === 0
+                    ? ""
+                    : ` Supported: ${optionError.allowedValues.join(", ")}.`
+                }`
+              : "Retry with a documented presentation option.",
+        },
+        capabilities,
+      )}\n`,
+    );
+    process.exitCode = 1;
+  } finally {
+    process.removeListener("SIGINT", interruptSignal);
+    process.removeListener("SIGTERM", terminateSignal);
+    process.removeListener("exit", exitCleanup);
+    progress.dispose();
+  }
+}
+
+const executedPath =
+  process.argv[1] === undefined ? "" : resolve(process.argv[1]);
+if (executedPath === resolve(fileURLToPath(import.meta.url))) await main();

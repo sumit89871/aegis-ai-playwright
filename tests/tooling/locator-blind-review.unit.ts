@@ -6,16 +6,23 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  detectTerminalCapabilities,
   diagnoseLocatorFailure,
   importLocatorDiagnosisObservation,
   MAX_LOCATOR_CANDIDATES,
   rankLocatorCandidates,
 } from "../../packages/core/src/index.ts";
 import type {
+  CliProgressReporter,
   LocatorBlindCandidateMapping,
   LocatorBlindReview,
   LocatorObservation,
 } from "../../packages/core/src/index.ts";
+import {
+  CLI_PROGRESS_DEMO_STAGE_DURATION_MS,
+  CLI_PROGRESS_DEMO_STAGES,
+  runCliProgressDemonstration,
+} from "../../scripts/cli-progress-demo.ts";
 
 const repositoryRoot = resolve(
   fileURLToPath(new URL("../../", import.meta.url)),
@@ -138,20 +145,81 @@ async function withFixture(
 }
 
 await describe("blind review command workflow", async () => {
-  await it("runs the isolated progress demonstration with clean redirected output", () => {
-    for (const option of ["--plain", "--no-animation"]) {
-      const result = run(progressDemoScript, [option]);
-      assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stderr, "");
-      assert.match(result.stdout, /CLI PROGRESS DEMONSTRATION/iu);
-      assert.match(result.stdout, /progress cleanup complete/iu);
-      assert.match(result.stdout, /Network calls:\s+0/iu);
-      assert.match(result.stdout, /User artifacts:\s+not accessed/iu);
-      assert.equal(result.stdout.includes("\u001B"), false);
-      assert.doesNotMatch(
-        result.stdout,
-        /LOC-OBS-|BLIND-PACKET-|BLIND-CANDIDATE-|LOCATOR-|mapping|authorization|C:\\Users|\/home\//iu,
-      );
+  await it("runs the isolated demonstration with fake time and no private activity", async () => {
+    const calls: string[] = [];
+    const waits: number[] = [];
+    const stdout: string[] = [];
+    const progress: CliProgressReporter = {
+      start: (stage) => calls.push(`start:${stage}`),
+      update: (stage) => calls.push(`update:${stage}`),
+      succeed: () => calls.push("succeed"),
+      fail: () => calls.push("fail"),
+      stop: () => calls.push("stop"),
+      interrupt: () => calls.push("interrupt"),
+      dispose: () => calls.push("dispose"),
+    };
+    const capabilities = detectTerminalCapabilities({
+      arguments: [],
+      environment: { WT_SESSION: "opaque-session" },
+      stdoutIsTty: true,
+      stderrIsTty: true,
+      columns: 100,
+      platform: "win32",
+    });
+    await runCliProgressDemonstration({
+      capabilities,
+      progress,
+      stdout: { write: (value) => stdout.push(value) },
+      wait: (milliseconds) => {
+        waits.push(milliseconds);
+        return Promise.resolve();
+      },
+    });
+    assert.deepEqual(waits, Array(5).fill(CLI_PROGRESS_DEMO_STAGE_DURATION_MS));
+    assert.equal(
+      waits.reduce((total, value) => total + value, 0),
+      4500,
+    );
+    assert.deepEqual(calls, [
+      `start:${CLI_PROGRESS_DEMO_STAGES[0] ?? ""}`,
+      ...CLI_PROGRESS_DEMO_STAGES.slice(1).map((stage) => `update:${stage}`),
+      "succeed",
+    ]);
+    const output = stdout.join("");
+    assert.match(output, /✅ CLI progress demonstration completed/u);
+    assert.match(output, /presentation-only/iu);
+    assert.match(output, /Network calls.*0/iu);
+    assert.match(output, /User artifacts.*not accessed/iu);
+    assert.doesNotMatch(
+      output,
+      /LOC-OBS-|BLIND-PACKET-|BLIND-CANDIDATE-|LOCATOR-|mapping|authorization|C:\\Users|\/home\//iu,
+    );
+  });
+
+  await it("reports safe demo diagnostics and expected option errors", () => {
+    const diagnostic = run(progressDemoScript, ["--diagnose-terminal"]);
+    assert.equal(diagnostic.status, 0, diagnostic.stderr);
+    assert.match(diagnostic.stdout, /SAFE TERMINAL DIAGNOSTIC/iu);
+    assert.match(diagnostic.stdout, /stdout TTY/iu);
+    assert.match(diagnostic.stdout, /Delayed start.*400 ms/iu);
+    assert.match(diagnostic.stdout, /Refresh.*150 ms/iu);
+    assert.doesNotMatch(
+      diagnostic.stdout,
+      /WT_SESSION=|opaque-session|C:\\Users|\/home\/|authorization/iu,
+    );
+
+    for (const [arguments_, code] of [
+      [["--progress-style=blink"], "CLI_PROGRESS_STYLE_UNSUPPORTED"],
+      [["--unicode", "--ascii"], "CLI_SYMBOL_MODE_CONFLICT"],
+      [["--emoji", "--no-emoji"], "CLI_EMOJI_MODE_CONFLICT"],
+      [["--ascii", "--emoji"], "CLI_ASCII_EMOJI_CONFLICT"],
+    ] as const) {
+      const invalid = run(progressDemoScript, arguments_);
+      assert.equal(invalid.status, 1);
+      assert.equal(invalid.stdout, "");
+      assert.match(invalid.stderr, new RegExp(code, "u"));
+      assert.match(invalid.stderr, /Fix:/u);
+      assert.doesNotMatch(invalid.stderr, /\n\s+at |C:\\Users|\/home\//u);
     }
   });
 

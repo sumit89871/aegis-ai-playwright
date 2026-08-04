@@ -89,7 +89,7 @@ These deterministic metrics must be understood before an AI-reranking comparison
 
 The normal command chooses rich output only when stdout is an interactive terminal, CI is absent, `TERM` is not `dumb`, and the terminal is at least 72 columns wide. Terminals at 80 columns and above receive bordered panels; 72–79 columns receive compact rich headings. Narrower terminals use plain output. Rendering is capped at 140 columns so a very wide terminal remains easy to scan. Rich output groups status, eligibility, diagnosis, recommendation, ranking, safety, confidence, abstention, isolation, interpretation, and elapsed time. Each section calculates one label width, and wrapped values align beneath their value rather than repeating labels or status markers. Labels accompany every color and symbol so color is never the only signal.
 
-Progress is delayed for 400 ms to avoid flicker and names only work the command is actually performing: loading records, counting pilot reviews, validating packet/mapping integrity, translating aliases and evaluating, calculating the safe aggregate, and writing reports. A command that finishes before the delay produces no progress output. Animation is transient stderr output; metrics remain stdout output. Ctrl+C, failure, and normal completion restore the cursor. CI, pipes, JSON, and plain mode never animate.
+Progress is delayed for 400 ms to avoid flicker and names only work the command is actually performing: loading records, counting pilot reviews, validating packet/mapping integrity, translating aliases and evaluating, calculating the safe aggregate, and writing reports. A command that finishes before the delay produces no progress output. The rich default is `thinking`: only message brightness pulses through dim → normal → bright → normal → dim → normal every 150 ms. The symbol and ellipsis remain stable, and ANSI blink is prohibited. Animation is transient stderr output; metrics remain stdout output. Ctrl+C, failure, exception, process exit, and normal completion reset ANSI, clear the line, and restore the cursor. CI, pipes, JSON, and plain mode never animate.
 
 ```text
 ┌ AegisAI · Blind Locator Holdout ───────────────────────────┐
@@ -113,17 +113,25 @@ RUN STATUS
   Sample status: INSUFFICIENT-SAMPLE
 ```
 
-`--no-animation` keeps rich static formatting on a capable interactive terminal but disables cursor animation. `NO_COLOR` disables color, `FORCE_COLOR=0` explicitly disables it, and legacy Windows terminals receive an ASCII fallback. Narrow terminals, `TERM=dumb`, redirected output, and CI automatically use plain mode. Screen readers can rely on headings and explicit `[WARNING]`, `[RISK]`, `[SUCCESS]`, and `[INFO]` labels rather than symbols.
+`--progress-style=thinking`, `--progress-style=spinner`, and `--progress-style=static` select a validated progress style. `--no-animation` keeps rich static formatting on a capable interactive terminal but disables cursor animation. `--emoji` requests emoji, `--no-emoji` selects the Unicode fallback, `--unicode` requests Unicode, and `--ascii` forces ASCII-safe symbols and borders. Conflicting or misspelled options fail through a bounded structured error without a stack trace.
+
+Windows Terminal is detected by the presence of `WT_SESSION`—its value is never retained or printed—and auto-selects the stable `💭` thinking symbol. Other supported Unicode terminals use `↻`; ASCII mode uses `[~]`. Standalone completion messages use `✅`/`⚠️`/`❌`/`ℹ️` in emoji mode, `✓`/`⚠`/`✗`/`○` in Unicode mode, and labelled ASCII forms such as `[OK]` and `[FAIL]`. Metric tables continue using labels and stable-width content rather than colorful double-width emoji. `NO_COLOR` and `FORCE_COLOR=0` disable color without automatically disabling Unicode, emoji, or supported brightness styling. Narrow terminals, `TERM=dumb`, redirected output, and CI automatically use plain mode. Screen readers can rely on headings and explicit semantic labels rather than color or symbols alone.
 
 To inspect progress behavior without reading observations, running business evaluation, or contacting a network service, use:
 
 ```powershell
 npm run cli:demo:progress
+npm run cli:demo:progress -- --progress-style=thinking --emoji
+npm run cli:demo:progress -- --progress-style=thinking --no-emoji
+npm run cli:demo:progress -- --progress-style=thinking --ascii
+npm run cli:demo:progress -- --progress-style=spinner --unicode
+npm run cli:demo:progress -- --progress-style=static
 npm run cli:demo:progress -- --no-animation
 npm run cli:demo:progress -- --plain
+npm run cli:demo:progress -- --diagnose-terminal
 ```
 
-The demo has deterministic stages and exists only for explicit local presentation testing; CI does not invoke it.
+The demo has five deterministic 900 ms stages (approximately 4.5 seconds) and exists only for explicit local presentation testing; CI does not invoke it. It reads no observations, calls no browser or provider, requires no key, and performs no evaluation, locator application, or healing. Its `💭` symbol means only that CLI presentation work is active. AI-specific messages belong only in a future command that genuinely calls a provider.
 
 Machine consumers should use `--summary-json`. It emits valid aggregate JSON only, with no banner, spinner, ANSI, Markdown, or trailing prose. The backward-compatible `--json` mode is also pure JSON, but contains private per-case records and must not be published. Expected command-option errors render as bounded structured blocks without stack traces; commands never repair review data automatically.
 

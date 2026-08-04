@@ -1,0 +1,42 @@
+# CLI presentation experience
+
+The reusable CLI layer renders plain result objects; it does not calculate validation or evaluation outcomes. Future advisory or guarded workflows should reuse this layer instead of duplicating timers or ANSI sequences.
+
+## Thinking progress
+
+Rich interactive terminals default to `thinking`. After a 400 ms delay, the message pulses every 150 ms through this exact sequence:
+
+```text
+dim → normal → bright → normal → dim → normal
+```
+
+The symbol, space, message text, and ellipsis keep the same terminal-cell width. Only the message brightness changes. ANSI blink is prohibited because support and accessibility are inconsistent. Every frame resets styling, and completion cancels unref'd timers, clears the transient stderr line, and restores the cursor before permanent stdout output.
+
+Windows Terminal auto-selects `💭`. A supported non-emoji terminal uses `↻`; ASCII mode uses `[~]`. If brightness is unavailable but animation is supported, the existing rotating spinner is used. Static mode prints truthful stage text without cursor animation. Plain, JSON, CI, redirected, non-TTY, and `TERM=dumb` output never animates.
+
+## Options
+
+```powershell
+npm run cli:demo:progress -- --progress-style=thinking
+npm run cli:demo:progress -- --progress-style=spinner
+npm run cli:demo:progress -- --progress-style=static
+npm run cli:demo:progress -- --emoji
+npm run cli:demo:progress -- --no-emoji
+npm run cli:demo:progress -- --unicode
+npm run cli:demo:progress -- --ascii
+npm run cli:demo:progress -- --no-animation
+npm run cli:demo:progress -- --plain
+npm run cli:demo:progress -- --diagnose-terminal
+```
+
+`--unicode` and `--ascii` conflict. `--emoji` and `--no-emoji` conflict. `--ascii --emoji` is invalid. Unsupported progress styles fail with a safe code, option name, supported values, and remediation—never a stack trace. `NO_COLOR` and `FORCE_COLOR=0` affect color, not Unicode or emoji selection.
+
+The diagnostic prints only TTY booleans, bounded width, CI/dumb-terminal booleans, Windows Terminal presence, selected modes, animation/color/brightness booleans, and timing constants. It never prints `WT_SESSION`, environment contents, paths, usernames, or secrets.
+
+## Output and accessibility contracts
+
+Transient progress uses stderr. Permanent reports and summaries use stdout. `--summary-json` remains aggregate-only; private `--json` remains the existing internal result. Both are pure JSON with no animation, emoji, ANSI, cursor bytes, or trailing prose.
+
+Colors and symbols supplement semantic text; they never replace it. Screen readers and plain logs retain explicit labels. Emoji are used for transient progress and standalone completion messages, not aligned metric columns. ANSI-aware terminal-cell measurement prevents emoji, Unicode, and styled text from shifting panels or animation frames.
+
+Animation is presentation only. `💭` does not imply an AI call, and no progress style authorizes locator application, source changes, replay, retries, or healing.
