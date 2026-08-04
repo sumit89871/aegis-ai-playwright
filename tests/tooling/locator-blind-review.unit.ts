@@ -92,6 +92,7 @@ async function fixtureObservation(
 function run(
   script: string,
   arguments_: readonly string[],
+  environment: Readonly<Record<string, string | undefined>> = {},
 ): SpawnSyncReturns<string> {
   return spawnSync(
     process.execPath,
@@ -100,7 +101,7 @@ function run(
       cwd: repositoryRoot,
       shell: false,
       encoding: "utf8",
-      env: { ...process.env, NO_COLOR: "1" },
+      env: { ...process.env, NO_COLOR: "1", ...environment },
     },
   );
 }
@@ -215,6 +216,10 @@ await describe("blind review command workflow", async () => {
         `--root=${relativeRoot}`,
       ]);
       assert.equal(evaluation.status, 0, evaluation.stderr);
+      assert.equal(evaluation.stderr, "");
+      assert.equal(evaluation.stdout.includes("\u001B"), false);
+      assert.doesNotMatch(evaluation.stdout, /PROGRESS|Loading blind/iu);
+      assert.doesNotMatch(evaluation.stdout, /^# |\[WARNING\]/mu);
       const result = JSON.parse(evaluation.stdout) as {
         counts: {
           calibrationPilotReviewed: number;
@@ -238,6 +243,9 @@ await describe("blind review command workflow", async () => {
       ]);
       assert.equal(summaryRun.status, 0, summaryRun.stderr);
       assert.equal(summaryRun.stderr, "");
+      assert.equal(summaryRun.stdout.includes("\u001B"), false);
+      assert.doesNotMatch(summaryRun.stdout, /PROGRESS|Loading blind/iu);
+      assert.doesNotMatch(summaryRun.stdout, /^# |\[WARNING\]/mu);
       const summary = JSON.parse(summaryRun.stdout) as {
         status: string;
         counts: { blindHoldoutReviewed: number };
@@ -255,11 +263,32 @@ await describe("blind review command workflow", async () => {
         value: 1,
       });
 
-      const human = run(evaluateScript, [`--root=${relativeRoot}`]);
+      const human = run(evaluateScript, ["--plain", `--root=${relativeRoot}`]);
       assert.equal(human.status, 0, human.stderr);
+      assert.equal(human.stderr, "");
+      assert.equal(human.stdout.includes("\u001B"), false);
       assert.match(human.stdout, /INSUFFICIENT-SAMPLE/u);
       assert.match(human.stdout, /Classification agreement: 100\.0% \(1\/1\)/u);
-      assert.match(human.stdout, /Top-1\/top-3 acceptable/u);
+      assert.match(human.stdout, /Top-1 acceptable/u);
+      assert.match(human.stdout, /Top-3 acceptable/u);
+      assert.match(human.stdout, /EXECUTION ISOLATION/u);
+      assert.match(human.stdout, /Elapsed time/u);
+
+      const noAnimation = run(evaluateScript, [
+        "--no-animation",
+        `--root=${relativeRoot}`,
+      ]);
+      assert.equal(noAnimation.status, 0, noAnimation.stderr);
+      assert.equal(noAnimation.stderr, "");
+      assert.equal(noAnimation.stdout.includes("\u001B"), false);
+
+      const ci = run(evaluateScript, [`--root=${relativeRoot}`], {
+        CI: "true",
+        FORCE_COLOR: "0",
+      });
+      assert.equal(ci.status, 0, ci.stderr);
+      assert.equal(ci.stdout.includes("\u001B"), false);
+      assert.doesNotMatch(ci.stderr, /PROGRESS|Loading blind/iu);
 
       const markdown = await readFile(
         join(root, "blind/reports/blind-holdout-deterministic-only.md"),
@@ -269,12 +298,50 @@ await describe("blind review command workflow", async () => {
       assert.match(markdown, /Meaningful sample: no/u);
       assert.match(markdown, /cannot establish production accuracy/u);
 
-      const publicOutputs = [summaryRun.stdout, human.stdout, markdown];
+      const publicOutputs = [
+        summaryRun.stdout,
+        human.stdout,
+        noAnimation.stdout,
+        ci.stdout,
+        markdown,
+      ];
       for (const output of publicOutputs)
         assert.doesNotMatch(
           output,
           /LOC-OBS-|BLIND-PACKET-|BLIND-CANDIDATE-|LOCATOR-\d|observationId|packetId|mapping|reviewerRationale|errorMessage|deterministicScore|rankedCandidates|expectedClassification|actualClassification|C:\\Users|\/home\/|bearer\s+|authorization/iu,
         );
+    });
+  });
+
+  await it("renders expected CLI option errors safely without a stack", async () => {
+    await withFixture(({ relativeRoot }) => {
+      const result = run(evaluateScript, [
+        "--plain",
+        "--unsupported",
+        `--root=${relativeRoot}`,
+      ]);
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, "");
+      assert.match(result.stderr, /Blind holdout evaluation failed/u);
+      assert.match(result.stderr, /CLI_EXECUTION_FAILED/u);
+      assert.match(result.stderr, /Fix:/u);
+      assert.doesNotMatch(result.stderr, /\n\s+at |C:\\Users|\/home\//u);
+
+      const json = run(evaluateScript, [
+        "--summary-json",
+        "--unsupported",
+        `--root=${relativeRoot}`,
+      ]);
+      assert.equal(json.status, 1);
+      assert.equal(json.stderr, "");
+      assert.equal(json.stdout.includes("\u001B"), false);
+      assert.doesNotMatch(json.stdout, /PROGRESS|Loading blind/iu);
+      const parsed = JSON.parse(json.stdout) as {
+        status: string;
+        error: { code: string };
+      };
+      assert.equal(parsed.status, "error");
+      assert.equal(parsed.error.code, "CLI_EXECUTION_FAILED");
     });
   });
 

@@ -24,6 +24,8 @@ npm run ai:locator:observations:prepare-blind-review -- --id=LOC-OBS-...
 npm run ai:locator:observations:validate-blind-reviews
 npm run ai:locator:observations:validate-blind-reviews -- --json
 npm run ai:locator:holdout:evaluate:blind
+npm run ai:locator:holdout:evaluate:blind -- --plain
+npm run ai:locator:holdout:evaluate:blind -- --no-animation
 npm run ai:locator:holdout:evaluate:blind -- --summary-json
 ```
 
@@ -82,6 +84,37 @@ Use `--summary-json` for a machine-readable allowlisted aggregate. It contains c
 Top-1 and top-3 acceptable rates show whether a human-approved candidate was suggested first or within the first three ranks. Forbidden-at-top-1 and forbidden-within-top-3 measure unsafe promotion only when a forbidden candidate was actually returned. Confidence-floor agreement measures whether the produced confidence met the reviewer's minimum using `low < medium < high`, without exposing individual requirements. Abstention correctness evaluates `insufficient-evidence` and `collection-unavailable` decisions: appropriate abstentions, inappropriate abstentions, and cases where abstention was expected but another recommendation was returned. Zero eligible denominators are `N/A`, never `0%`.
 
 These deterministic metrics must be understood before an AI-reranking comparison. They never authorize locator application, replay, retries, source changes, or automatic healing.
+
+## Terminal output modes
+
+The normal command chooses rich output only when stdout is an interactive terminal, CI is absent, `TERM` is not `dumb`, and the terminal is wide enough. Rich output groups status, eligibility, diagnosis, recommendation, ranking, safety, confidence, abstention, isolation, interpretation, and elapsed time. Labels accompany every color and symbol so color is never the only signal.
+
+Progress is delayed for 300 ms to avoid flicker and names only work the command is actually performing: loading records, counting pilot reviews, validating packet/mapping integrity, translating aliases and evaluating, calculating the safe aggregate, and writing reports. Animation is transient stderr output; metrics remain stdout output. Ctrl+C, failure, and normal completion restore the cursor. CI, pipes, JSON, and plain mode never animate.
+
+```text
+┌ AegisAI · Blind Locator Holdout ───────────────────────────┐
+└────────────────────────────────────────────────────────────┘
+
+◆ RUN STATUS
+  Mode:          deterministic-only
+  Sample status: INSUFFICIENT-SAMPLE
+
+[WARNING] The reviewed sample is directional evidence, not production proof.
+```
+
+Use `--plain` for stable ASCII text:
+
+```text
+AEGISAI - BLIND LOCATOR HOLDOUT
+
+RUN STATUS
+  Mode:          deterministic-only
+  Sample status: INSUFFICIENT-SAMPLE
+```
+
+`--no-animation` keeps rich static formatting on a capable interactive terminal but disables cursor animation. `NO_COLOR` disables color, `FORCE_COLOR=0` explicitly disables it, and legacy Windows terminals receive an ASCII fallback. Narrow terminals, `TERM=dumb`, redirected output, and CI automatically use plain mode. Screen readers can rely on headings and explicit `[WARNING]`, `[RISK]`, `[SUCCESS]`, and `[INFO]` labels rather than symbols.
+
+Machine consumers should use `--summary-json`. It emits valid aggregate JSON only, with no banner, spinner, ANSI, Markdown, or trailing prose. The backward-compatible `--json` mode is also pure JSON, but contains private per-case records and must not be published. Expected command-option errors render as bounded structured blocks without stack traces; commands never repair review data automatically.
 
 ## Limitations and safety
 

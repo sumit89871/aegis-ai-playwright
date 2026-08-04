@@ -97,6 +97,8 @@ Observation and legacy human-review records are separate, but the observation it
 
 The blind holdout adapter validates all four records, builds analyser input from the observation alone, and only then translates the human verdict for comparison. It reports pilot/calibration and blind counts separately. Local pending observations, packets, mappings, reviews, and reports are ignored artifacts. No component can apply a candidate, replay an action, call a provider, or modify source.
 
+The reusable CLI presentation module depends only on terminal capabilities and plain presentation inputs. It owns TTY/CI/color/width detection, wrapping, semantic sections, safe error blocks, and delayed progress lifecycle; it imports no locator-evaluation logic. The blind-holdout presenter receives the privacy-safe aggregate DTO, while the root script owns filesystem orchestration and stdout/stderr selection. JSON serialization bypasses all human rendering and progress.
+
 ## Why there is no BasePage
 
 A generic `BasePage` tends to collect unrelated navigation, waiting, selector, and assertion helpers. That inheritance hides dependencies and encourages broad abstractions with weak business meaning. Consumer projects instead use small composition-based objects that expose only behaviour owned by their page or component.
