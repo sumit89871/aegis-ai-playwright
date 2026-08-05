@@ -291,7 +291,7 @@ await describe("locator advisory reranking contract", async () => {
       ]).rankedCandidateIds,
       ["BLIND-CANDIDATE-002"],
     );
-    assert.equal(LOCATOR_ADVISORY_RERANKING_PROMPT_VERSION, "1.0.0");
+    assert.equal(LOCATOR_ADVISORY_RERANKING_PROMPT_VERSION, "1.1.0");
   });
 
   for (const [title, invalid] of [
@@ -364,6 +364,12 @@ await describe("blind advisory execution isolation", async () => {
       { mode: "mock-ai", aiClientFactory: () => aiClient },
     );
     assert.ok(provider.request);
+    assert.equal(provider.request.responseFormat.type, "json_schema");
+    assert.equal(provider.request.responseFormat.strict, true);
+    assert.equal(
+      provider.request.responseFormat.name,
+      "locator_advisory_reranking_v1",
+    );
     const serialized = JSON.stringify(provider.request);
     assert.match(serialized, /BLIND-CANDIDATE-/u);
     assert.doesNotMatch(
@@ -487,8 +493,52 @@ await describe("deterministic versus advisory comparison", async () => {
     assert.equal(comparison.counts.advisoryCompleted, 1);
     assert.equal(comparison.counts.advisoryUnavailable, 1);
     assert.equal(comparison.provider.invalidStructuredOutputCount, 1);
+    assert.deepEqual(comparison.provider.validationIssueCounts, {
+      "unknown-candidate-id": 1,
+    });
     assert.equal(comparison.advisoryMetrics.safety.unknownCandidateIdCount, 1);
     assert.equal(comparison.effectiveMode, "partial-ai-advisory");
+  });
+
+  await it("keeps an all-invalid advisory batch unavailable with aggregate diagnostics", async () => {
+    const value = await observation();
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const review = completedReview(artifacts, "LOCATOR-001", ["LOCATOR-002"]);
+    const phase = await runLocatorAdvisoryComparisonPhase(
+      [{ observation: value, packet: artifacts.packet }],
+      {
+        mode: "mock-ai",
+        aiClientFactory: () =>
+          client(
+            output(["BLIND-CANDIDATE-999"], {
+              confidence: "certain",
+            }),
+          ),
+      },
+    );
+    const comparison = await completeLocatorAdvisoryComparison(phase, [
+      answerRecord(value, artifacts, review),
+    ]);
+    const summary = createLocatorAdvisoryComparisonAggregateSummary(comparison);
+    assert.equal(comparison.effectiveMode, "ai-unavailable");
+    assert.equal(comparison.counts.advisoryCompleted, 0);
+    assert.deepEqual(summary.provider.validationIssueCounts, {
+      "unknown-candidate-id": 1,
+      "unsupported-confidence": 1,
+    });
+    const publicOutput = `${renderLocatorAdvisoryComparisonTerminal(
+      summary,
+      detectTerminalCapabilities({
+        arguments: ["--plain"],
+        stdoutIsTty: false,
+        stderrIsTty: false,
+        platform: "linux",
+      }),
+      1,
+    )}\n${renderLocatorAdvisoryComparisonMarkdown(summary)}\n${JSON.stringify(summary)}`;
+    assert.match(publicOutput, /unknown-candidate-id/u);
+    assert.match(publicOutput, /unsupported-confidence/u);
+    assert.doesNotMatch(publicOutput, /BLIND-CANDIDATE-|certain/u);
   });
 
   await it("supports zero and maximum candidate inventories through comparison", async () => {

@@ -24,8 +24,13 @@ import {
   LOCATOR_ADVISORY_RERANKING_PROMPT_ID,
   LOCATOR_ADVISORY_RERANKING_PROMPT_VERSION,
 } from "./locator-advisory-reranking-prompt.ts";
+import {
+  createLocatorAdvisoryRerankingJsonSchema,
+  LOCATOR_ADVISORY_RERANKING_JSON_SCHEMA_NAME,
+  LOCATOR_ADVISORY_RERANKING_SCHEMA_VERSION,
+} from "./locator-advisory-reranking-schema.ts";
+export { LOCATOR_ADVISORY_RERANKING_SCHEMA_VERSION } from "./locator-advisory-reranking-schema.ts";
 
-export const LOCATOR_ADVISORY_RERANKING_SCHEMA_VERSION = "1.0.0" as const;
 export const LOCATOR_ADVISORY_RERANKING_CAPABILITY = "ui-locator-reranking";
 export const LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS = 512;
 export const LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS = 15_000;
@@ -87,10 +92,29 @@ export interface LocatorAdvisoryOutputSafety {
 
 export interface LocatorAdvisoryOutputInspection {
   readonly valid: boolean;
+  readonly issueCodes: readonly LocatorAdvisoryValidationIssueCode[];
   readonly issues: readonly string[];
   readonly safety: LocatorAdvisoryOutputSafety;
   readonly output?: LocatorAdvisoryRerankingOutput;
 }
+
+export const LOCATOR_ADVISORY_VALIDATION_ISSUE_CODES = [
+  "output-not-object",
+  "unsupported-field",
+  "unsupported-schema-version",
+  "unsupported-recommendation-status",
+  "unsupported-confidence",
+  "candidate-ids-not-array",
+  "candidate-inventory-bound-exceeded",
+  "candidate-id-not-string",
+  "duplicate-candidate-id",
+  "unknown-candidate-id",
+  "candidates-available-without-candidate",
+  "ranked-candidates-with-abstention",
+  "unsafe-summary",
+] as const;
+export type LocatorAdvisoryValidationIssueCode =
+  (typeof LOCATOR_ADVISORY_VALIDATION_ISSUE_CODES)[number];
 
 export type LocatorAdvisoryExecutionStatus =
   | "completed"
@@ -112,6 +136,8 @@ export interface LocatorAdvisoryExecutionResult {
   readonly retryCount: number;
   readonly approximateCostUsd?: number;
   readonly errorCode?: string;
+  readonly validationIssueCodes?: readonly LocatorAdvisoryValidationIssueCode[];
+  readonly finishReason?: string;
   readonly safety: LocatorAdvisoryOutputSafety;
   readonly promptId: typeof LOCATOR_ADVISORY_RERANKING_PROMPT_ID;
   readonly promptVersion: typeof LOCATOR_ADVISORY_RERANKING_PROMPT_VERSION;
@@ -133,6 +159,7 @@ const ABSOLUTE_PATH =
   /(?:[A-Za-z]:\\(?:Users|Documents|Desktop)\\|\/(?:home|Users)\/[^/\s]+)/u;
 const ABSOLUTE_PATH_GLOBAL =
   /(?:[A-Za-z]:\\(?:Users|Documents|Desktop)\\|\/(?:home|Users)\/[^/\s]+)/gu;
+const MARKDOWN_TEXT = /(?:^|\n)\s{0,3}#{1,6}\s|[*_]{2}|`|\[[^\]]+\]\([^)]+\)/u;
 
 function safeText(
   value: string | undefined,
@@ -237,7 +264,15 @@ export function inspectLocatorAdvisoryRerankingOutput(
 ): LocatorAdvisoryOutputInspection {
   const known = new Set(suppliedCandidateIds);
   const safety = safetyFrom(value, known);
+  const issueCodes: LocatorAdvisoryValidationIssueCode[] = [];
   const issues: string[] = [];
+  const addIssue = (
+    code: LocatorAdvisoryValidationIssueCode,
+    message: string,
+  ): void => {
+    issueCodes.push(code);
+    issues.push(message);
+  };
   if (
     typeof value !== "object" ||
     value === null ||
@@ -246,6 +281,9 @@ export function inspectLocatorAdvisoryRerankingOutput(
   ) {
     return Object.freeze({
       valid: false,
+      issueCodes: Object.freeze<LocatorAdvisoryValidationIssueCode[]>([
+        "output-not-object",
+      ]),
       issues: Object.freeze(["Output must be a plain JSON object."]),
       safety,
     });
@@ -259,58 +297,87 @@ export function inspectLocatorAdvisoryRerankingOutput(
     "summary",
   ]);
   for (const field of Object.keys(input).sort())
-    if (!fields.has(field)) issues.push(`Unsupported output field ${field}.`);
+    if (!fields.has(field))
+      addIssue(
+        "unsupported-field",
+        "An unsupported output field was returned.",
+      );
   if (input.schemaVersion !== LOCATOR_ADVISORY_RERANKING_SCHEMA_VERSION)
-    issues.push("schemaVersion is unsupported.");
+    addIssue("unsupported-schema-version", "schemaVersion is unsupported.");
   if (
     !LOCATOR_RECOMMENDATION_STATUSES.includes(
       input.recommendationStatus as never,
     )
   )
-    issues.push("recommendationStatus is unsupported.");
+    addIssue(
+      "unsupported-recommendation-status",
+      "recommendationStatus is unsupported.",
+    );
   if (!["high", "medium", "low"].includes(input.confidence as string))
-    issues.push("confidence is unsupported.");
+    addIssue("unsupported-confidence", "confidence is unsupported.");
   if (!Array.isArray(input.rankedCandidateIds)) {
-    issues.push("rankedCandidateIds must be an array.");
+    addIssue("candidate-ids-not-array", "rankedCandidateIds must be an array.");
   } else {
     if (input.rankedCandidateIds.length > MAX_LOCATOR_CANDIDATES)
-      issues.push("rankedCandidateIds exceeds the candidate inventory bound.");
+      addIssue(
+        "candidate-inventory-bound-exceeded",
+        "rankedCandidateIds exceeds the candidate inventory bound.",
+      );
     const ids = input.rankedCandidateIds.filter(
       (entry): entry is string => typeof entry === "string",
     );
     if (ids.length !== input.rankedCandidateIds.length)
-      issues.push("rankedCandidateIds must contain only strings.");
+      addIssue(
+        "candidate-id-not-string",
+        "rankedCandidateIds must contain only strings.",
+      );
     if (new Set(ids).size !== ids.length)
-      issues.push("rankedCandidateIds must not contain duplicates.");
+      addIssue(
+        "duplicate-candidate-id",
+        "rankedCandidateIds must not contain duplicates.",
+      );
     if (ids.some((id) => !known.has(id)))
-      issues.push("rankedCandidateIds contains an unknown candidate ID.");
+      addIssue(
+        "unknown-candidate-id",
+        "rankedCandidateIds contains an unknown candidate ID.",
+      );
     if (
       input.recommendationStatus === "candidates-available" &&
       ids.length === 0
     )
-      issues.push(
+      addIssue(
+        "candidates-available-without-candidate",
         "candidates-available requires at least one ranked candidate.",
       );
     if (input.recommendationStatus !== "candidates-available" && ids.length > 0)
-      issues.push("Only candidates-available may return ranked candidates.");
+      addIssue(
+        "ranked-candidates-with-abstention",
+        "Only candidates-available may return ranked candidates.",
+      );
   }
   if (
     typeof input.summary !== "string" ||
     input.summary.trim().length === 0 ||
     input.summary.length > 500 ||
     UNSAFE_TEXT.test(input.summary) ||
+    MARKDOWN_TEXT.test(input.summary) ||
     ABSOLUTE_PATH.test(input.summary) ||
     containsSensitiveUrlData(input.summary)
   )
-    issues.push("summary must be bounded sanitized advisory text.");
+    addIssue(
+      "unsafe-summary",
+      "summary must be bounded sanitized advisory text.",
+    );
   if (issues.length > 0)
     return Object.freeze({
       valid: false,
+      issueCodes: Object.freeze(issueCodes),
       issues: Object.freeze(issues),
       safety,
     });
   return Object.freeze({
     valid: true,
+    issueCodes: Object.freeze([]),
     issues: Object.freeze([]),
     safety,
     output: Object.freeze({
@@ -347,9 +414,12 @@ function statusFromError(error: unknown): LocatorAdvisoryExecutionStatus {
   if (error.code === "rate-limited") return "rate-limited";
   if (error.code === "structured-output-invalid") return "invalid-output";
   if (
-    ["provider-unavailable", "network-disabled", "secret-missing"].includes(
-      error.code,
-    )
+    [
+      "provider-unavailable",
+      "provider-parameters-unsupported",
+      "network-disabled",
+      "secret-missing",
+    ].includes(error.code)
   )
     return "provider-unavailable";
   return "failed";
@@ -373,14 +443,20 @@ export async function runLocatorAdvisoryReranking(
         ),
       }),
       responseFormat: Object.freeze({
-        type: "json_object" as const,
+        type: "json_schema" as const,
+        name: LOCATOR_ADVISORY_RERANKING_JSON_SCHEMA_NAME,
+        strict: true,
+        schema: createLocatorAdvisoryRerankingJsonSchema(candidateIds),
         validatorId: "locator-advisory-reranking-v1",
         validator: (value) => {
           latestInspection = inspectLocatorAdvisoryRerankingOutput(
             value,
             candidateIds,
           );
-          return latestInspection.valid;
+          return Object.freeze({
+            valid: latestInspection.valid,
+            errors: latestInspection.issueCodes,
+          });
         },
       }),
       capability: LOCATOR_ADVISORY_RERANKING_CAPABILITY,
@@ -422,6 +498,7 @@ export async function runLocatorAdvisoryReranking(
           ? {}
           : { approximateCostUsd: result.approximateCostUsd }),
         errorCode: "structured-output-missing",
+        validationIssueCodes: latestInspection?.issueCodes ?? Object.freeze([]),
         safety: latestInspection?.safety ?? EMPTY_SAFETY,
         promptId: LOCATOR_ADVISORY_RERANKING_PROMPT_ID,
         promptVersion: LOCATOR_ADVISORY_RERANKING_PROMPT_VERSION,
@@ -443,6 +520,7 @@ export async function runLocatorAdvisoryReranking(
         ? {}
         : { approximateCostUsd: result.approximateCostUsd }),
       safety: latestInspection?.safety ?? EMPTY_SAFETY,
+      finishReason: result.finishReason,
       promptId: LOCATOR_ADVISORY_RERANKING_PROMPT_ID,
       promptVersion: LOCATOR_ADVISORY_RERANKING_PROMPT_VERSION,
     });
@@ -450,10 +528,29 @@ export async function runLocatorAdvisoryReranking(
     const status = statusFromError(error);
     return Object.freeze({
       status,
+      providerId: aiClient.configuration.provider,
       requestedModel: aiClient.configuration.model,
+      ...(error instanceof AiError &&
+      error.responseMetadata?.returnedModel !== undefined
+        ? { returnedModel: error.responseMetadata.returnedModel }
+        : {}),
       durationMs: Math.max(Date.now() - startedAt, 0),
       retryCount: 0,
       errorCode: error instanceof AiError ? error.code : "advisory-failure",
+      ...(error instanceof AiError &&
+      error.responseMetadata?.finishReason !== undefined
+        ? { finishReason: error.responseMetadata.finishReason }
+        : {}),
+      validationIssueCodes:
+        latestInspection?.issueCodes ??
+        (error instanceof AiError
+          ? (error.validationErrors?.filter(
+              (entry): entry is LocatorAdvisoryValidationIssueCode =>
+                LOCATOR_ADVISORY_VALIDATION_ISSUE_CODES.includes(
+                  entry as LocatorAdvisoryValidationIssueCode,
+                ),
+            ) ?? Object.freeze([]))
+          : Object.freeze([])),
       safety: latestInspection?.safety ?? EMPTY_SAFETY,
       promptId: LOCATOR_ADVISORY_RERANKING_PROMPT_ID,
       promptVersion: LOCATOR_ADVISORY_RERANKING_PROMPT_VERSION,

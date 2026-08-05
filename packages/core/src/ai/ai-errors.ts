@@ -11,6 +11,8 @@ export const AI_ERROR_CODES = [
   "request-blocked",
   "authentication-failed",
   "request-invalid",
+  "provider-parameters-unsupported",
+  "provider-schema-rejected",
   "rate-limited",
   "provider-unavailable",
   "provider-timeout",
@@ -25,6 +27,21 @@ export const AI_ERROR_CODES = [
 ] as const;
 
 export type AiErrorCode = (typeof AI_ERROR_CODES)[number];
+
+const MAX_AI_VALIDATION_ERRORS = 10;
+const MAX_AI_VALIDATION_ERROR_CHARACTERS = 200;
+
+function safeValidationError(value: string): string {
+  return redactSensitiveText(value, MAX_AI_VALIDATION_ERROR_CHARACTERS)
+    .replace(/\b(?:sk|or)-[A-Za-z0-9_-]{10,}\b/giu, "[REDACTED_SECRET]")
+    .replace(/\bBearer\s+\S+/giu, "Bearer [REDACTED]")
+    .replace(
+      /(?:[A-Za-z]:\\(?:Users|Documents|Desktop)\\|\/(?:home|Users)\/)[^\s]*/gu,
+      "[LOCAL_PATH_REMOVED]",
+    )
+    .replace(/\b(?:BLIND|AI)-CANDIDATE-\d+\b/giu, "[CANDIDATE_ID]")
+    .replace(/\bLOCATOR-\d+\b/giu, "[CANDIDATE_ID]");
+}
 
 export interface AiProviderResponseMetadata {
   readonly httpCategory: "success" | "failure";
@@ -47,6 +64,7 @@ export class AiError extends Error {
   public readonly retryAfterMs?: number;
   public readonly httpStatus?: number;
   public readonly responseMetadata?: AiProviderResponseMetadata;
+  public readonly validationErrors?: readonly string[];
 
   public constructor(options: {
     readonly code: AiErrorCode;
@@ -55,6 +73,7 @@ export class AiError extends Error {
     readonly retryAfterMs?: number;
     readonly httpStatus?: number;
     readonly responseMetadata?: AiProviderResponseMetadata;
+    readonly validationErrors?: readonly string[];
   }) {
     super(redactSensitiveText(options.message, 500));
     this.name = "AiError";
@@ -68,6 +87,13 @@ export class AiError extends Error {
     }
     if (options.responseMetadata !== undefined) {
       this.responseMetadata = Object.freeze({ ...options.responseMetadata });
+    }
+    if (options.validationErrors !== undefined) {
+      this.validationErrors = Object.freeze(
+        options.validationErrors
+          .slice(0, MAX_AI_VALIDATION_ERRORS)
+          .map(safeValidationError),
+      );
     }
   }
 }

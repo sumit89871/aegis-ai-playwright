@@ -7,10 +7,14 @@ export interface ParsedAiOutput {
   readonly structuredOutput?: Readonly<Record<string, unknown>>;
 }
 
-function structuredError(message: string): never {
+function structuredError(
+  message: string,
+  validationErrors?: readonly string[],
+): never {
   throw new AiError({
     code: "structured-output-invalid",
     message: redactSensitiveText(message, 500),
+    ...(validationErrors === undefined ? {} : { validationErrors }),
   });
 }
 
@@ -46,6 +50,7 @@ export function parseAiOutput(
     if (!valid) {
       return structuredError(
         "AI structured output failed the supplied validator.",
+        typeof validation === "boolean" ? undefined : validation.errors,
       );
     }
   }

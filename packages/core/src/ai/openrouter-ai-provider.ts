@@ -3,6 +3,7 @@ import { AiError, toSafeAiError } from "./ai-errors.ts";
 import type { AiProviderResponseMetadata } from "./ai-errors.ts";
 import type { AiProvider, AiProviderExecutionContext } from "./ai-provider.ts";
 import { validateAiProviderId } from "./ai-provider.ts";
+import { validateAiResponseFormat } from "./ai-response-format.ts";
 import type {
   AiGenerationRequest,
   AiGenerationResult,
@@ -42,7 +43,11 @@ function parseRetryAfter(value: string | null): number | undefined {
   return Math.min(Math.max(date - Date.now(), 0), 30_000);
 }
 
-function errorFromStatus(status: number, retryAfter: string | null): AiError {
+function errorFromStatus(
+  status: number,
+  retryAfter: string | null,
+  strictSchemaRequested: boolean,
+): AiError {
   const responseMetadata = Object.freeze({
     httpCategory: "failure" as const,
   });
@@ -50,6 +55,23 @@ function errorFromStatus(status: number, retryAfter: string | null): AiError {
     return new AiError({
       code: "authentication-failed",
       message: "OpenRouter rejected the request credentials.",
+      httpStatus: status,
+      responseMetadata,
+    });
+  }
+  if (strictSchemaRequested && status === 404) {
+    return new AiError({
+      code: "provider-parameters-unsupported",
+      message:
+        "OpenRouter found no endpoint compatible with the required structured-output parameters.",
+      httpStatus: status,
+      responseMetadata,
+    });
+  }
+  if (strictSchemaRequested && (status === 400 || status === 422)) {
+    return new AiError({
+      code: "provider-schema-rejected",
+      message: "OpenRouter rejected the required JSON Schema request.",
       httpStatus: status,
       responseMetadata,
     });
@@ -395,6 +417,7 @@ export class OpenRouterAiProvider implements AiProvider {
       controller.abort();
     }, request.timeoutMs);
     const startedAt = this.#now();
+    const responseFormat = validateAiResponseFormat(request.responseFormat);
     try {
       const response = await this.#fetch(context.endpoint, {
         method: "POST",
@@ -416,9 +439,21 @@ export class OpenRouterAiProvider implements AiProvider {
           temperature: request.temperature,
           max_completion_tokens: request.maxOutputTokens,
           reasoning: { effort: "none", exclude: true },
-          ...(request.responseFormat.type === "json_object"
+          ...(responseFormat.type === "json_object"
             ? { response_format: { type: "json_object" } }
-            : {}),
+            : responseFormat.type === "json_schema"
+              ? {
+                  response_format: {
+                    type: "json_schema",
+                    json_schema: {
+                      name: responseFormat.name,
+                      strict: responseFormat.strict,
+                      schema: responseFormat.schema,
+                    },
+                  },
+                  provider: { require_parameters: true },
+                }
+              : {}),
         }),
         signal: controller.signal,
       });
@@ -426,6 +461,7 @@ export class OpenRouterAiProvider implements AiProvider {
         throw errorFromStatus(
           response.status,
           response.headers.get("retry-after"),
+          responseFormat.type === "json_schema",
         );
       }
       const responseText = await response.text();

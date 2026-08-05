@@ -288,6 +288,17 @@ export function renderLocatorAdvisoryComparisonTerminal(
           value: aggregateCategories(summary.provider.failureCodes),
           status: providerFailures === 0 ? "neutral" : "warning",
         },
+        ...(summary.provider.invalidStructuredOutputCount === 0
+          ? []
+          : [
+              {
+                label: "Validation issue categories",
+                value: aggregateCategories(
+                  summary.provider.validationIssueCounts,
+                ),
+                status: "warning" as const,
+              },
+            ]),
         {
           label: "Input / output tokens",
           value: `${summary.provider.inputTokens === null ? "N/A" : String(summary.provider.inputTokens)} / ${summary.provider.outputTokens === null ? "N/A" : String(summary.provider.outputTokens)}`,
@@ -451,6 +462,11 @@ export function renderLocatorAdvisoryComparisonMarkdown(
     `- Requests/success/failure: ${String(summary.provider.requestCount)}/${String(summary.provider.successfulRequestCount)}/${String(summary.provider.failedRequestCount)}`,
     `- Invalid structured output: ${String(summary.provider.invalidStructuredOutputCount)}`,
     `- Failure categories: ${aggregateCategories(summary.provider.failureCodes)}`,
+    ...(summary.provider.invalidStructuredOutputCount === 0
+      ? []
+      : [
+          `- Validation issue categories: ${aggregateCategories(summary.provider.validationIssueCounts)}`,
+        ]),
     `- Retries: ${String(summary.provider.retryCount)}`,
     `- Aggregate input/output tokens: ${summary.provider.inputTokens === null ? "N/A" : String(summary.provider.inputTokens)}/${summary.provider.outputTokens === null ? "N/A" : String(summary.provider.outputTokens)}`,
     `- Approximate aggregate cost USD: ${numberOrNA(summary.provider.approximateCostUsd, 6)}`,

@@ -59,3 +59,15 @@ Fixed TypeScript scoring remains the default baseline. It is predictable and aud
 The provider input is built from the blind reviewer packet without loading its review or private mapping. Original `LOCATOR-*` IDs, deterministic ordering/scores/stability/rationale, and human expected classification, recommendation, acceptable/preferred/forbidden sets, confidence floor, and rationale are excluded. A concise versioned prompt requires semantic and operation compatibility, uniqueness, visibility, enablement, editability for fill operations, and abstention when evidence is weak. Output schema `1.0.0` accepts only supported recommendation statuses, supplied neutral IDs, supported confidence, and a bounded sanitized summary; invented/duplicate IDs, unknown fields, prohibited repairs, patches, commands, and unsafe text are rejected.
 
 Run the offline comparison with `npm run ai:locator:holdout:compare -- --mode=mock-ai`. Live OpenRouter execution requires `--mode=ai-advisory --confirm-network` and the existing secure configuration. Failed or invalid cases reduce advisory coverage instead of receiving a disguised deterministic fallback. Side-by-side aggregates do not reveal cases, IDs, prompts, raw responses, or human answers. They remain advisory evidence only and never apply a locator.
+
+The `locator-advisory-reranking` prompt is version `1.1.0`; its output schema remains version `1.0.0`. It explicitly names all five fields, allowed recommendation and confidence values, candidate-array status rules, and the 500-character summary bound. OpenRouter also receives a strict per-request JSON Schema whose candidate enum contains only that request's neutral aliases. Provider enforcement is not trusted alone: the TypeScript validator still rejects unknown or duplicate aliases, extra fields, invalid status relationships, and unsafe summary content.
+
+Use this live order only after offline validation:
+
+```text
+npm run ai:locator:reranking:verify -- --confirm-network
+npm run ai:locator:holdout:compare -- --mode=ai-advisory --confirm-network
+npm run ai:locator:holdout:compare -- --mode=ai-advisory --confirm-network --summary-json
+```
+
+The first command makes exactly one request with compiled synthetic evidence and no observation, packet, mapping, or human review. It prints no aliases, prompt, summary, or raw response. A pass confirms contract compatibility only. The five-case comparison remains an insufficient sample, and neither command authorizes locator application or healing.

@@ -10,10 +10,21 @@ export type StructuredOutputValidator = (
   value: Readonly<Record<string, unknown>>,
 ) => boolean | { readonly valid: boolean; readonly errors?: readonly string[] };
 
+export type AiJsonSchema = Readonly<Record<string, unknown>>;
+
 export type AiResponseFormat =
   | { readonly type: "text" }
   | {
       readonly type: "json_object";
+      readonly validator?: StructuredOutputValidator;
+      readonly validatorId?: string;
+      readonly retainRawText?: boolean;
+    }
+  | {
+      readonly type: "json_schema";
+      readonly name: string;
+      readonly strict: boolean;
+      readonly schema: AiJsonSchema;
       readonly validator?: StructuredOutputValidator;
       readonly validatorId?: string;
       readonly retainRawText?: boolean;

@@ -90,6 +90,7 @@ export interface LocatorAdvisoryProviderAggregate {
   readonly meanLatencyMs: number | null;
   readonly statuses: Readonly<Record<string, number>>;
   readonly failureCodes: Readonly<Record<string, number>>;
+  readonly validationIssueCounts: Readonly<Record<string, number>>;
 }
 
 export interface LocatorAdvisoryComparisonResult {
@@ -402,11 +403,18 @@ function providerAggregate(
   };
   const statuses = new Map<string, number>();
   const failureCodes = new Map<string, number>();
+  const validationIssueCounts = new Map<string, number>();
   for (const execution of executions)
     statuses.set(execution.status, (statuses.get(execution.status) ?? 0) + 1);
   for (const { errorCode } of executions)
     if (errorCode !== undefined)
       failureCodes.set(errorCode, (failureCodes.get(errorCode) ?? 0) + 1);
+  for (const { validationIssueCodes } of executions)
+    for (const issueCode of validationIssueCodes ?? [])
+      validationIssueCounts.set(
+        issueCode,
+        (validationIssueCounts.get(issueCode) ?? 0) + 1,
+      );
   const returnedModels = [
     ...new Set(
       completed.flatMap(({ returnedModel }) =>
@@ -475,6 +483,13 @@ function providerAggregate(
     failureCodes: Object.freeze(
       Object.fromEntries(
         [...failureCodes.entries()].sort(([a], [b]) => a.localeCompare(b)),
+      ),
+    ),
+    validationIssueCounts: Object.freeze(
+      Object.fromEntries(
+        [...validationIssueCounts.entries()].sort(([a], [b]) =>
+          a.localeCompare(b),
+        ),
       ),
     ),
   });

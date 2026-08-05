@@ -98,6 +98,14 @@ const providerRequest: AiGenerationRequest = Object.freeze({
   responseFormat: Object.freeze({ type: "json_object" }),
   timeoutMs: 1_000,
 });
+const strictSchema = Object.freeze({
+  type: "object",
+  additionalProperties: false,
+  properties: Object.freeze({
+    result: Object.freeze({ type: "string", const: "ok" }),
+  }),
+  required: Object.freeze(["result"]),
+});
 const template: PromptTemplate = Object.freeze({
   id: "synthetic-event",
   version: "1.0.0",
@@ -174,8 +182,85 @@ await describe("OpenRouter AI provider", async () => {
       exclude: true,
     });
     assert.deepEqual(requestBody.response_format, { type: "json_object" });
+    assert.equal(requestBody.provider, undefined);
     assert.equal(result.text, '{"result":"ok"}');
     assert.doesNotMatch(JSON.stringify(result), /synthetic-test-key/u);
+  });
+
+  await it("maps strict JSON Schema and requires compatible provider parameters", async () => {
+    let requestBody: Readonly<Record<string, unknown>> = Object.freeze({});
+    const server = await startServer(async (request, response) => {
+      requestBody = await readJsonRequest(request);
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(completionBody());
+    });
+    await new OpenRouterAiProvider().generate(
+      {
+        ...providerRequest,
+        responseFormat: {
+          type: "json_schema",
+          name: "synthetic_contract_v1",
+          strict: true,
+          schema: strictSchema,
+        },
+      },
+      { endpoint: server.endpoint, apiKey: "synthetic-test-key" },
+    );
+    assert.deepEqual(requestBody.response_format, {
+      type: "json_schema",
+      json_schema: {
+        name: "synthetic_contract_v1",
+        strict: true,
+        schema: strictSchema,
+      },
+    });
+    assert.deepEqual(requestBody.provider, { require_parameters: true });
+  });
+
+  await it("does not add structured parameters to text requests", async () => {
+    let requestBody: Readonly<Record<string, unknown>> = Object.freeze({});
+    const server = await startServer(async (request, response) => {
+      requestBody = await readJsonRequest(request);
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(completionBody("plain text"));
+    });
+    await new OpenRouterAiProvider().generate(
+      { ...providerRequest, responseFormat: { type: "text" } },
+      { endpoint: server.endpoint, apiKey: "synthetic-test-key" },
+    );
+    assert.equal(requestBody.response_format, undefined);
+    assert.equal(requestBody.provider, undefined);
+  });
+
+  await it("classifies strict-schema capability and schema rejection safely", async () => {
+    for (const [status, code] of [
+      [404, "provider-parameters-unsupported"],
+      [422, "provider-schema-rejected"],
+    ] as const) {
+      const server = await startServer((_request, response) => {
+        response.writeHead(status, { "content-type": "application/json" });
+        response.end('{"private":"schema and key must not escape"}');
+      });
+      await assert.rejects(
+        new OpenRouterAiProvider().generate(
+          {
+            ...providerRequest,
+            responseFormat: {
+              type: "json_schema",
+              name: "synthetic_contract_v1",
+              strict: true,
+              schema: strictSchema,
+            },
+          },
+          { endpoint: server.endpoint, apiKey: "synthetic-test-key" },
+        ),
+        (error: unknown) =>
+          error instanceof AiError &&
+          error.code === code &&
+          !JSON.stringify(error).includes("synthetic-test-key") &&
+          !JSON.stringify(error).includes("private"),
+      );
+    }
   });
 
   await it("parses structured JSON through the generic client", async () => {

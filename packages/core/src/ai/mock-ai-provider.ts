@@ -25,7 +25,7 @@ export interface MockAiRequestInspection {
   readonly messageCount: number;
   readonly inputCharacterCount: number;
   readonly requestedOutputTokens: number;
-  readonly responseFormat: "text" | "json_object";
+  readonly responseFormat: "text" | "json_object" | "json_schema";
   readonly metadata: Readonly<Record<string, string>>;
 }
 

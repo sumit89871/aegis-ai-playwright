@@ -47,4 +47,6 @@ Animation is presentation only. `💭` does not imply an AI call, and no progres
 
 The locator advisory comparison consumes the same presentation API. Live mode reports only truthful work stages: loading eligible packets, preparing sanitized evidence, requesting advisory reranking, validating structured responses, loading independent human answers afterward, comparing rankings, calculating aggregate deltas, and writing privacy-safe reports. Deterministic and mock modes never claim a live provider request.
 
+Invalid strict locator output may add aggregate validation issue categories to the provider section. These are stable bounded codes only; the renderer receives no raw response, prompt, candidate ID, human answer, or per-case validation value. The separate synthetic verifier uses plain safe lines so its one-request result can be captured without generating artifacts.
+
 Transient stages remain stderr-only and stop before the permanent stdout report. `--summary-json`, `--plain`, CI, `TERM=dumb`, and redirected execution remain free of animation. The normal 400 ms delayed start is unchanged, so a fast comparison can complete without showing progress. Presentation does not change any deterministic or advisory metric.

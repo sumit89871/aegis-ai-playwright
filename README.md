@@ -248,17 +248,22 @@ The blind evaluator prints privacy-safe aggregate quality metrics even while the
 
 An optional comparison command measures that unchanged deterministic baseline beside constrained advisory reranking. The advisory provider receives only a versioned target/failure allowlist and neutral `BLIND-CANDIDATE-*` aliases in the packet's deterministic neutral order. It receives no original IDs, deterministic scores or rank, private alias mapping, completed review fields, human verdict arrays, or rationale. AI may choose and order only supplied aliases; it cannot change the classification, invent a selector, execute a locator, retry an action, or modify source. Human answers are loaded only after every advisory response has completed and passed strict structured-output validation.
 
+Locator advisory now uses strict `json_schema` output rather than generic `json_object`. The request supplies the exact five-field contract, marks it strict, and asks OpenRouter to route only to endpoints that support the required parameter. Provider-side schema handling is the first gate; Aegis's TypeScript validator remains the final gate for candidate relationships and safety. There is no fallback to weaker JSON mode. Invalid output retains only bounded issue categories—never raw responses, candidate IDs, prompts, or private evidence.
+
 ```text
 npm run ai:locator:holdout:compare
 npm run ai:locator:holdout:compare -- --mode=mock-ai
 npm run ai:locator:holdout:compare -- --mode=mock-ai --summary-json
 npm run ai:locator:holdout:compare -- --mode=mock-ai --plain
 npm run ai:locator:holdout:compare -- --mode=ai-advisory --confirm-network
+npm run ai:locator:reranking:verify -- --confirm-network
 ```
 
 Deterministic-only is the comparison default; mock mode is offline and reproducible. Live mode reuses the existing OpenRouter adapter and requires explicit network consent plus `AEGIS_AI_ENABLED`, `AEGIS_AI_ALLOW_NETWORK_CALLS`, `OPENROUTER_API_KEY`, `AEGIS_AI_MODEL`, `AEGIS_AI_INPUT_COST_PER_MILLION_USD`, and `AEGIS_AI_OUTPUT_COST_PER_MILLION_USD` in the local shell. Values are never printed or committed. Requests use a 15-second timeout, at most one retry, 512 output tokens, and the existing per-request cost guard. Unit tests, validation, doctor, and CI never select live mode.
 
 The public terminal, Markdown, and `--summary-json` outputs contain aggregate side-by-side metrics, percentage-point deltas, provider coverage/usage, and isolation guarantees only. Unavailable, timed-out, rate-limited, or invalid provider results remain unavailable and are excluded from AI denominators; they are never replaced with deterministic results under an AI label. Five blind cases remain `INSUFFICIENT-SAMPLE`, regardless of apparent improvement. Generated comparison reports are ignored, and no comparison result authorizes healing.
+
+For live verification, run offline tests first, then the one-request synthetic reranking verifier, and only then the five-case comparison. The verifier uses three compiled synthetic aliases, reads no observation artifacts, retains no raw output, applies no locator, and performs no healing. A passing provider contract still does not establish accuracy or authorize execution.
 
 Interactive terminals automatically receive responsive rich output. At 80 columns and above, metrics use bordered panels with section-local alignment; 72–79 columns use compact rich headings, and narrower terminals use plain output. Rendering is capped at 140 columns so very wide terminals remain scannable. CI, redirected output, `TERM=dumb`, and `--plain` use stable ASCII text without ANSI or cursor control. `--no-animation` retains static rich formatting on a capable terminal. `NO_COLOR` disables color without disabling supported Unicode or emoji, while JSON modes always emit JSON only.
 

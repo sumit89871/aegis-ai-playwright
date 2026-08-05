@@ -8,6 +8,7 @@ import {
 } from "./ai-configuration.ts";
 import type { AiProvider } from "./ai-provider.ts";
 import { validateAiProviderId } from "./ai-provider.ts";
+import { validateAiResponseFormat } from "./ai-response-format.ts";
 import type {
   AiClientResult,
   AiGenerationRequest,
@@ -68,6 +69,7 @@ function validateClientRequest(
   readonly maxOutputTokens: number;
   readonly requestTimeoutMs: number;
   readonly maxRetries: number;
+  readonly responseFormat: AiResponseFormat;
 } {
   const model = request.model ?? configuration.model;
   if (!validateAiProviderId(model)) {
@@ -124,7 +126,13 @@ function validateClientRequest(
       message: "AI request retries must not exceed the configured retry limit.",
     });
   }
-  return { temperature, maxOutputTokens, requestTimeoutMs, maxRetries };
+  return {
+    temperature,
+    maxOutputTokens,
+    requestTimeoutMs,
+    maxRetries,
+    responseFormat: validateAiResponseFormat(request.responseFormat),
+  };
 }
 
 function actualApproximateCost(
@@ -220,8 +228,13 @@ export function createAiClient(
           request.template,
           request.variables,
         );
-        const { temperature, maxOutputTokens, requestTimeoutMs, maxRetries } =
-          validateClientRequest(request, configuration);
+        const {
+          temperature,
+          maxOutputTokens,
+          requestTimeoutMs,
+          maxRetries,
+          responseFormat,
+        } = validateClientRequest(request, configuration);
         const estimate = enforceAiUsageLimits(configuration, {
           inputCharacters: rendered.totalCharacters,
           requestedOutputTokens: maxOutputTokens,
@@ -246,7 +259,7 @@ export function createAiClient(
           model: request.model ?? configuration.model,
           temperature,
           maxOutputTokens,
-          responseFormat: request.responseFormat,
+          responseFormat,
           timeoutMs: requestTimeoutMs,
           metadata: Object.freeze({
             promptTemplateId: rendered.templateId,
@@ -277,10 +290,39 @@ export function createAiClient(
                 ? {}
                 : { applicationName: configuration.applicationName }),
             });
-            const parsed = parseAiOutput(
-              providerResult.text,
-              request.responseFormat,
-            );
+            let parsed;
+            try {
+              parsed = parseAiOutput(providerResult.text, responseFormat);
+            } catch (error) {
+              const safeError = toSafeAiError(error);
+              if (safeError.code !== "structured-output-invalid")
+                throw safeError;
+              throw new AiError({
+                code: safeError.code,
+                message: safeError.message,
+                ...(safeError.validationErrors === undefined
+                  ? {}
+                  : { validationErrors: safeError.validationErrors }),
+                responseMetadata: Object.freeze({
+                  httpCategory: "success",
+                  returnedModel: providerResult.model,
+                  finishReason: providerResult.finishReason,
+                  ...(providerResult.usage?.outputTokens === undefined
+                    ? {}
+                    : {
+                        completionTokens: providerResult.usage.outputTokens,
+                      }),
+                  ...(providerResult.usage?.reasoningTokens === undefined
+                    ? {}
+                    : {
+                        reasoningTokens: providerResult.usage.reasoningTokens,
+                      }),
+                  ...(providerResult.providerRequestId === undefined
+                    ? {}
+                    : { providerRequestId: providerResult.providerRequestId }),
+                }),
+              });
+            }
             const durationMs = Math.max(now() - startedAt, 0);
             const approximateCostUsd =
               actualApproximateCost(
