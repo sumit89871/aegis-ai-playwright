@@ -159,6 +159,7 @@ export function renderLocatorAdvisoryVerificationResult(
       `TypeScript business validation: ${result.typescriptBusinessValidation.toUpperCase()}`,
       `Input tokens: ${String(result.usage?.inputTokens ?? "unavailable")}`,
       `Output tokens: ${String(result.usage?.outputTokens ?? "unavailable")}`,
+      `Reasoning tokens: ${String(result.usage?.reasoningTokens ?? "unavailable")}`,
       `Duration ms: ${String(result.durationMs)}`,
       `Retry count: ${String(result.retryCount)}`,
       `Finish reason: ${result.finishReason ?? "unavailable"}`,

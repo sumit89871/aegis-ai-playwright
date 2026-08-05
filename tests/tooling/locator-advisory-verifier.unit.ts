@@ -85,19 +85,42 @@ await describe("locator advisory synthetic verifier CLI", async () => {
   });
 
   await it("is isolated from artifacts, locators, healing, and CI", async () => {
-    const [script, rootPackage, workflow] = await Promise.all([
-      readFile(verifierScript, "utf8"),
-      readFile(resolve(repositoryRoot, "package.json"), "utf8"),
-      readFile(
-        resolve(repositoryRoot, ".github/workflows/framework-ci.yml"),
-        "utf8",
-      ),
-    ]);
+    const [script, provider, renderer, rootPackage, workflow] =
+      await Promise.all([
+        readFile(verifierScript, "utf8"),
+        readFile(
+          resolve(
+            repositoryRoot,
+            "packages/core/src/ai/openrouter-ai-provider.ts",
+          ),
+          "utf8",
+        ),
+        readFile(
+          resolve(
+            repositoryRoot,
+            "packages/core/src/locator-diagnosis/locator-advisory-reranking-verification.ts",
+          ),
+          "utf8",
+        ),
+        readFile(resolve(repositoryRoot, "package.json"), "utf8"),
+        readFile(
+          resolve(repositoryRoot, ".github/workflows/framework-ci.yml"),
+          "utf8",
+        ),
+      ]);
     assert.doesNotMatch(
       script,
       /artifacts\/locator-observations|blind\/packets|blind\/mappings|blind\/reviews|page\.(?:click|fill|press)|locator\.click|writeFile|appendFile/u,
     );
+    assert.match(script, /providers: \[new OpenRouterAiProvider\(\)\]/u);
     assert.match(script, /renderLocatorAdvisoryVerificationResult/u);
+    assert.match(provider, /reasoning: \{ exclude: true \}/u);
+    assert.doesNotMatch(provider, /reasoning: \{[^}]*effort/u);
+    assert.match(renderer, /Reasoning tokens:/u);
+    assert.doesNotMatch(
+      renderer,
+      /messageRecord\.reasoning|reasoning_details|raw provider response/u,
+    );
     assert.doesNotMatch(
       rootPackage,
       /"ci:framework":\s*"[^"]*ai:locator:reranking:verify/u,

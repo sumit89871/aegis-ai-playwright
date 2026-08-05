@@ -435,7 +435,7 @@ export class OpenRouterAiProvider implements AiProvider {
           ],
           temperature: request.temperature,
           max_tokens: request.maxOutputTokens,
-          reasoning: { effort: "none", exclude: true },
+          reasoning: { exclude: true },
           ...(responseFormat.type === "json_object"
             ? { response_format: { type: "json_object" } }
             : responseFormat.type === "json_schema"

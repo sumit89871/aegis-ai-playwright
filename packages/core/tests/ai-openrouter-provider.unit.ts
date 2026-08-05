@@ -177,10 +177,11 @@ await describe("OpenRouter AI provider", async () => {
     assert.equal(authorization, "Bearer synthetic-test-key");
     assert.equal(requestBody.max_tokens, 100);
     assert.equal(requestBody.max_completion_tokens, undefined);
-    assert.deepEqual(requestBody.reasoning, {
-      effort: "none",
-      exclude: true,
-    });
+    assert.deepEqual(requestBody.reasoning, { exclude: true });
+    assert.equal(
+      (requestBody.reasoning as Readonly<Record<string, unknown>>).effort,
+      undefined,
+    );
     assert.deepEqual(requestBody.response_format, { type: "json_object" });
     assert.equal(requestBody.provider, undefined);
     assert.equal(result.text, '{"result":"ok"}');
@@ -203,8 +204,29 @@ await describe("OpenRouter AI provider", async () => {
     assert.equal(requestBody.max_completion_tokens, undefined);
     assert.equal(requestBody.model, providerRequest.model);
     assert.equal(requestBody.temperature, providerRequest.temperature);
-    assert.deepEqual(requestBody.reasoning, { effort: "none", exclude: true });
+    assert.deepEqual(requestBody.reasoning, { exclude: true });
     assert.deepEqual(requestBody.response_format, { type: "json_object" });
+  });
+
+  await it("does not disable mandatory provider reasoning while excluding reasoning output", async () => {
+    let requestBody: Readonly<Record<string, unknown>> = Object.freeze({});
+    const server = await startServer(async (request, response) => {
+      requestBody = await readJsonRequest(request);
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(completionBody());
+    });
+    await new OpenRouterAiProvider().generate(
+      { ...providerRequest, model: "openai/gpt-oss-20b:free" },
+      { endpoint: server.endpoint, apiKey: "synthetic-test-key" },
+    );
+    assert.deepEqual(requestBody.reasoning, { exclude: true });
+    assert.equal(
+      (requestBody.reasoning as Readonly<Record<string, unknown>>).effort,
+      undefined,
+    );
+    assert.equal(requestBody.max_tokens, providerRequest.maxOutputTokens);
+    assert.equal(requestBody.max_completion_tokens, undefined);
+    assert.equal(requestBody.model, "openai/gpt-oss-20b:free");
   });
 
   await it("maps strict JSON Schema and requires compatible provider parameters", async () => {
@@ -236,6 +258,7 @@ await describe("OpenRouter AI provider", async () => {
     });
     assert.equal(requestBody.max_tokens, 100);
     assert.equal(requestBody.max_completion_tokens, undefined);
+    assert.deepEqual(requestBody.reasoning, { exclude: true });
     assert.deepEqual(requestBody.provider, { require_parameters: true });
   });
 
@@ -252,6 +275,7 @@ await describe("OpenRouter AI provider", async () => {
     );
     assert.equal(requestBody.response_format, undefined);
     assert.equal(requestBody.provider, undefined);
+    assert.deepEqual(requestBody.reasoning, { exclude: true });
   });
 
   await it("classifies strict-schema capability and schema rejection safely", async () => {

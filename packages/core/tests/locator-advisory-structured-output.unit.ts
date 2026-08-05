@@ -39,7 +39,12 @@ function client(structuredOutput: Readonly<Record<string, unknown>>): {
 } {
   const provider = new MockAiProvider({
     structuredOutput,
-    usage: { inputTokens: 100, outputTokens: 30, totalTokens: 130 },
+    usage: {
+      inputTokens: 100,
+      outputTokens: 30,
+      reasoningTokens: 10,
+      totalTokens: 130,
+    },
     durationMs: 25,
   });
   return {
@@ -197,6 +202,7 @@ await describe("locator advisory strict structured output", async () => {
     );
     assert.match(rendered, /Supplied-ID validation: PASS/u);
     assert.match(rendered, /TypeScript business validation: PASS/u);
+    assert.match(rendered, /Reasoning tokens: 10/u);
     assert.match(rendered, /Locator application: absent/u);
     assert.match(rendered, /Automatic healing: absent/u);
     assert.doesNotMatch(
