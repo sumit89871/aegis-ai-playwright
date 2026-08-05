@@ -2,7 +2,7 @@ import { redactSensitiveText } from "../diagnostics/redaction.ts";
 import { AiError, toSafeAiError } from "./ai-errors.ts";
 import type { AiProviderResponseMetadata } from "./ai-errors.ts";
 import type { AiProvider, AiProviderExecutionContext } from "./ai-provider.ts";
-import { validateAiProviderId } from "./ai-provider.ts";
+import { validateAiModelId } from "./ai-provider.ts";
 import { validateAiResponseFormat } from "./ai-response-format.ts";
 import type {
   AiGenerationRequest,
@@ -242,7 +242,7 @@ function parseResponse(
   const usage = parseUsage(body.usage);
   const providerRequestId = safeProviderRequestId(body.id, headerRequestId);
   const returnedModel =
-    typeof body.model === "string" && validateAiProviderId(body.model)
+    typeof body.model === "string" && validateAiModelId(body.model)
       ? redactSensitiveText(body.model, 128)
       : undefined;
   const commonMetadata = Object.freeze({
@@ -377,10 +377,7 @@ function parseResponse(
   }
   return Object.freeze({
     providerId: "openrouter",
-    model:
-      typeof body.model === "string"
-        ? redactSensitiveText(body.model, 128)
-        : request.model,
+    model: returnedModel ?? request.model,
     text: content,
     ...(usage === undefined ? {} : { usage }),
     finishReason,

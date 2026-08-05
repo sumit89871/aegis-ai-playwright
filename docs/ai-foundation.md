@@ -56,6 +56,8 @@ Real-provider execution requires all of these independent choices:
 
 Endpoints require HTTPS. Plain HTTP is accepted only for explicitly enabled localhost test or mock endpoints. Credentials and sensitive query parameters are rejected.
 
+Provider and model identifiers use separate normalized validators. Provider IDs remain colon-free names such as `openrouter` or `mock`. Model IDs preserve the existing normalized base syntax and may add one lowercase variant suffix, for example `openai/gpt-oss-20b:free`; the complete identifier remains bounded to 128 characters. This affects local input and returned-metadata validation only. External endpoint availability and strict JSON Schema support remain provider decisions, and Aegis does not fall back to generic JSON mode.
+
 ## Prompt and output security
 
 Prompts are versioned templates with declared variables and rendered-length limits. Values derived from browsers, applications, logs, or other external sources must use the untrusted-content wrapper. The wrapper redacts common secrets and places evidence inside deterministic labelled boundaries so it remains data rather than trusted instructions.

@@ -191,6 +191,51 @@ await describe("AI client", async () => {
     assert.equal(result.status, "completed");
   });
 
+  await it("passes configured and overridden model variants to the selected provider", async () => {
+    const configuredProvider = new MockAiProvider({
+      structuredOutput: { result: "ok" },
+    });
+    const configuredClient = createAiClient(
+      defaultAiConfiguration({
+        ...enabledMockConfiguration(),
+        model: "openai/gpt-oss-20b:free",
+      }),
+      { providers: [configuredProvider] },
+    );
+    await configuredClient.generate(request);
+    assert.equal(
+      configuredProvider.inspections()[0]?.model,
+      "openai/gpt-oss-20b:free",
+    );
+    assert.equal(configuredClient.configuration.provider, "mock");
+
+    const overrideProvider = new MockAiProvider({
+      structuredOutput: { result: "ok" },
+    });
+    await createAiClient(enabledMockConfiguration(), {
+      providers: [overrideProvider],
+    }).generate({ ...request, model: "vendor/model:variant-1" });
+    assert.equal(
+      overrideProvider.inspections()[0]?.model,
+      "vendor/model:variant-1",
+    );
+  });
+
+  await it("rejects a malformed per-request model before provider execution", async () => {
+    const provider = new MockAiProvider({ structuredOutput: { result: "ok" } });
+    await assert.rejects(
+      createAiClient(enabledMockConfiguration(), {
+        providers: [provider],
+      }).generate({
+        ...request,
+        model: "vendor/model:free:extra",
+      }),
+      (error: unknown) =>
+        error instanceof AiError && error.code === "request-invalid",
+    );
+    assert.equal(provider.inspections().length, 0);
+  });
+
   await it("rejects request limits that exceed configured policy", async () => {
     await assert.rejects(
       createAiClient(enabledMockConfiguration(), {

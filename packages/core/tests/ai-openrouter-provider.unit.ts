@@ -673,6 +673,89 @@ await describe("OpenRouter AI provider", async () => {
     assert.equal(result.providerRequestId, "generation-safe-1");
   });
 
+  await it("retains a normalized returned model variant consistently", async () => {
+    const returnedModel = "openai/gpt-oss-20b:free";
+    const successServer = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: "generation-variant-1",
+          model: returnedModel,
+          choices: [
+            { message: { content: '{"result":"ok"}' }, finish_reason: "stop" },
+          ],
+        }),
+      );
+    });
+    const result = await new OpenRouterAiProvider().generate(providerRequest, {
+      endpoint: successServer.endpoint,
+      apiKey: "synthetic-test-key",
+    });
+    assert.equal(result.model, returnedModel);
+
+    const failureServer = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          model: returnedModel,
+          choices: [{ message: { content: null }, finish_reason: "stop" }],
+        }),
+      );
+    });
+    await assert.rejects(
+      new OpenRouterAiProvider().generate(providerRequest, {
+        endpoint: failureServer.endpoint,
+        apiKey: "synthetic-test-key",
+      }),
+      (error: unknown) =>
+        error instanceof AiError &&
+        error.responseMetadata?.returnedModel === returnedModel,
+    );
+  });
+
+  await it("ignores an unsafe returned model consistently", async () => {
+    const unsafeModel = "unsafe model?token=private-value";
+    const successServer = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          model: unsafeModel,
+          choices: [
+            { message: { content: '{"result":"ok"}' }, finish_reason: "stop" },
+          ],
+        }),
+      );
+    });
+    const result = await new OpenRouterAiProvider().generate(providerRequest, {
+      endpoint: successServer.endpoint,
+      apiKey: "synthetic-test-key",
+    });
+    assert.equal(result.model, providerRequest.model);
+    assert.doesNotMatch(JSON.stringify(result), /private-value/u);
+
+    const failureServer = await startServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          model: unsafeModel,
+          choices: [{ message: { content: null }, finish_reason: "stop" }],
+        }),
+      );
+    });
+    await assert.rejects(
+      new OpenRouterAiProvider().generate(providerRequest, {
+        endpoint: failureServer.endpoint,
+        apiKey: "synthetic-test-key",
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof AiError);
+        assert.equal(error.responseMetadata?.returnedModel, undefined);
+        assert.doesNotMatch(JSON.stringify(error), /private-value/u);
+        return true;
+      },
+    );
+  });
+
   await it("recognizes token exhaustion when empty content consumes the limit", async () => {
     const server = await startServer((_request, response) => {
       response.writeHead(200, { "content-type": "application/json" });

@@ -7,7 +7,7 @@ import {
   validateAiConfiguration,
 } from "./ai-configuration.ts";
 import type { AiProvider } from "./ai-provider.ts";
-import { validateAiProviderId } from "./ai-provider.ts";
+import { validateAiModelId } from "./ai-provider.ts";
 import { validateAiResponseFormat } from "./ai-response-format.ts";
 import type {
   AiClientResult,
@@ -72,7 +72,7 @@ function validateClientRequest(
   readonly responseFormat: AiResponseFormat;
 } {
   const model = request.model ?? configuration.model;
-  if (!validateAiProviderId(model)) {
+  if (!validateAiModelId(model)) {
     throw new AiError({
       code: "request-invalid",
       message: "AI request model must use a normalized identifier.",

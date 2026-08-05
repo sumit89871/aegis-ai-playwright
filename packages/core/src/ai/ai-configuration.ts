@@ -3,6 +3,7 @@ import {
   sanitizeUrl,
 } from "../diagnostics/redaction.ts";
 import { AiError } from "./ai-errors.ts";
+import { validateAiModelId, validateAiProviderId } from "./ai-provider.ts";
 
 export interface AiConfiguration {
   readonly enabled: boolean;
@@ -26,7 +27,6 @@ export interface AiConfiguration {
 export const DEFAULT_OPENROUTER_ENDPOINT =
   "https://openrouter.ai/api/v1/chat/completions";
 
-const IDENTIFIER_PATTERN = /^[a-z0-9][a-z0-9._/-]{0,127}$/u;
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const ENVIRONMENT_VARIABLE_PATTERN = /^[A-Z][A-Z0-9_]{1,127}$/u;
 const ALLOWED_FIELDS = new Set([
@@ -168,12 +168,12 @@ export function validateAiConfiguration(value: unknown): AiConfiguration {
   const enabled = requireBoolean(value.enabled, "enabled");
   const provider = requireString(value.provider, "provider", 128);
   const model = requireString(value.model, "model", 128);
-  if (!IDENTIFIER_PATTERN.test(provider)) {
+  if (!validateAiProviderId(provider)) {
     return configurationError(
       "provider must use a normalized provider identifier.",
     );
   }
-  if (!IDENTIFIER_PATTERN.test(model)) {
+  if (!validateAiModelId(model)) {
     return configurationError("model must use a normalized model identifier.");
   }
   const allowInsecureLocalhost = requireBoolean(

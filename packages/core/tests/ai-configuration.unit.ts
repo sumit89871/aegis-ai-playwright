@@ -5,6 +5,8 @@ import {
   AiError,
   defaultAiConfiguration,
   validateAiConfiguration,
+  validateAiModelId,
+  validateAiProviderId,
 } from "../src/index.ts";
 
 function validConfiguration(): ReturnType<typeof defaultAiConfiguration> {
@@ -36,6 +38,92 @@ await describe("AI configuration", async () => {
       unknown
     >;
     assert.equal(serialized.apiKey, undefined);
+  });
+
+  await it("keeps provider and model identifier grammars separate", () => {
+    for (const provider of [
+      "openrouter",
+      "mock",
+      "local-provider",
+      "provider.v2",
+    ])
+      assert.equal(validateAiProviderId(provider), true);
+    for (const provider of [
+      "openrouter:free",
+      ".provider",
+      "Invalid",
+      "invalid provider",
+      "provider?mode=free",
+      "provider#fragment",
+      "provider\\name",
+      `p${"x".repeat(128)}`,
+    ])
+      assert.equal(validateAiProviderId(provider), false);
+
+    for (const model of [
+      "vendor/model-v1",
+      "openrouter/free",
+      "selected/free-model-v2",
+      "openai/gpt-oss-20b:free",
+      "vendor/model:variant-1",
+      "vendor/model:variant.v2",
+    ])
+      assert.equal(validateAiModelId(model), true);
+    for (const model of [
+      "",
+      ":free",
+      "vendor/model:",
+      "vendor/model:free:extra",
+      "invalid model",
+      "Vendor/Model",
+      "vendor\\model",
+      "vendor/model?key=value",
+      "vendor/model#fragment",
+      "vendor/model:@free",
+      " vendor/model",
+      "vendor/model ",
+      "vendor/model\n",
+      `vendor/${"x".repeat(122)}`,
+    ])
+      assert.equal(validateAiModelId(model), false);
+  });
+
+  await it("accepts normalized model variant suffixes in configuration", () => {
+    for (const model of [
+      "vendor/model-v1",
+      "openrouter/free",
+      "openai/gpt-oss-20b:free",
+      "vendor/model:variant-1",
+    ])
+      assert.equal(defaultAiConfiguration({ model }).model, model);
+    assert.equal(
+      defaultAiConfiguration({ provider: "openrouter" }).provider,
+      "openrouter",
+    );
+    assert.throws(
+      () => defaultAiConfiguration({ provider: "openrouter:free" }),
+      (error: unknown) =>
+        error instanceof AiError && error.code === "configuration-invalid",
+    );
+  });
+
+  await it("rejects malformed model identifiers in configuration", () => {
+    for (const model of [
+      "invalid model",
+      ":free",
+      "vendor/model:",
+      "vendor/model:free:extra",
+      "Vendor/Model",
+      "vendor\\model",
+      "vendor/model?parameter=true",
+      "vendor/model#fragment",
+      `vendor/${"x".repeat(122)}`,
+    ])
+      assert.throws(
+        () => defaultAiConfiguration({ model }),
+        (error: unknown) =>
+          error instanceof AiError && error.code === "configuration-invalid",
+      );
   });
 
   for (const [name, override] of [
