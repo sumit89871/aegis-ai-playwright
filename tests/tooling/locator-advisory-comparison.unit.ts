@@ -246,10 +246,18 @@ await describe("locator advisory comparison CLI", async () => {
   });
 
   await it("keeps live advisory execution out of CI and normal validation", async () => {
-    const [rootPackage, workflow] = await Promise.all([
+    const [rootPackage, workflow, script, comparison] = await Promise.all([
       readFile(join(repositoryRoot, "package.json"), "utf8"),
       readFile(
         join(repositoryRoot, ".github/workflows/framework-ci.yml"),
+        "utf8",
+      ),
+      readFile(comparisonScript, "utf8"),
+      readFile(
+        join(
+          repositoryRoot,
+          "packages/core/src/locator-observations/locator-advisory-comparison.ts",
+        ),
         "utf8",
       ),
     ]);
@@ -261,5 +269,24 @@ await describe("locator advisory comparison CLI", async () => {
       workflow,
       /ai:locator:holdout:compare|OPENROUTER_API_KEY|openrouter\.ai/u,
     );
+    assert.match(
+      script,
+      /maxOutputTokens:\s*LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS/u,
+    );
+    assert.match(
+      script,
+      /requestTimeoutMs:\s*LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS/u,
+    );
+    assert.match(script, /maxRetries:\s*1/u);
+    assert.match(
+      comparison,
+      /maxOutputTokens:\s*LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS/u,
+    );
+    assert.match(
+      comparison,
+      /requestTimeoutMs:\s*LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS/u,
+    );
+    assert.doesNotMatch(script, /maxOutputTokens:\s*512/u);
+    assert.doesNotMatch(script, /fetch\s*\(/u);
   });
 });

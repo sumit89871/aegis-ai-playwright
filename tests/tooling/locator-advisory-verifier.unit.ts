@@ -85,9 +85,16 @@ await describe("locator advisory synthetic verifier CLI", async () => {
   });
 
   await it("is isolated from artifacts, locators, healing, and CI", async () => {
-    const [script, provider, renderer, rootPackage, workflow] =
+    const [script, reranker, provider, renderer, rootPackage, workflow] =
       await Promise.all([
         readFile(verifierScript, "utf8"),
+        readFile(
+          resolve(
+            repositoryRoot,
+            "packages/core/src/locator-diagnosis/locator-advisory-reranking.ts",
+          ),
+          "utf8",
+        ),
         readFile(
           resolve(
             repositoryRoot,
@@ -113,6 +120,23 @@ await describe("locator advisory synthetic verifier CLI", async () => {
       /artifacts\/locator-observations|blind\/packets|blind\/mappings|blind\/reviews|page\.(?:click|fill|press)|locator\.click|writeFile|appendFile/u,
     );
     assert.match(script, /providers: \[new OpenRouterAiProvider\(\)\]/u);
+    assert.match(
+      script,
+      /maxOutputTokens:\s*LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS/u,
+    );
+    assert.match(
+      script,
+      /requestTimeoutMs:\s*LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS/u,
+    );
+    assert.match(script, /maxRetries:\s*0/u);
+    assert.match(
+      reranker,
+      /LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS\s*=\s*2_000/u,
+    );
+    assert.match(
+      reranker,
+      /LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS\s*=\s*15_000/u,
+    );
     assert.match(script, /renderLocatorAdvisoryVerificationResult/u);
     assert.match(provider, /reasoning: \{ exclude: true \}/u);
     assert.doesNotMatch(provider, /reasoning: \{[^}]*effort/u);

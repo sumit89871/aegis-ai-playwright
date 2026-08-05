@@ -8,9 +8,11 @@ import {
   defaultAiConfiguration,
   LOCATOR_ADVISORY_RERANKING_CAPABILITY,
   LOCATOR_ADVISORY_RERANKING_JSON_SCHEMA_NAME,
+  LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
   LOCATOR_ADVISORY_RERANKING_PROMPT,
   LOCATOR_ADVISORY_RERANKING_PROMPT_VERSION,
   LOCATOR_ADVISORY_RERANKING_SCHEMA_VERSION,
+  LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS,
   LOCATOR_RECOMMENDATION_STATUSES,
   MAX_LOCATOR_CANDIDATES,
   MockAiProvider,
@@ -57,10 +59,10 @@ function client(structuredOutput: Readonly<Record<string, unknown>>): {
         allowNetworkCalls: false,
         mockOnly: true,
         enabledCapabilities: [LOCATOR_ADVISORY_RERANKING_CAPABILITY],
-        requestTimeoutMs: 15_000,
+        requestTimeoutMs: LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS,
         maxRetries: 0,
         maxInputCharacters: 30_000,
-        maxOutputTokens: 512,
+        maxOutputTokens: LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
         defaultTemperature: 0,
       }),
       { providers: [provider] },
@@ -174,6 +176,8 @@ await describe("locator advisory strict structured output", async () => {
   });
 
   await it("uses strict schema and completes a valid synthetic verification", async () => {
+    assert.equal(LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS, 2_000);
+    assert.equal(LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS, 15_000);
     const configured = client(output());
     const verification = await verifyLocatorAdvisoryStructuredOutput(
       configured.client,
@@ -187,6 +191,14 @@ await describe("locator advisory strict structured output", async () => {
     assert.equal(verification.suppliedIdValidation, "pass");
     assert.equal(verification.typescriptBusinessValidation, "pass");
     assert.equal(configured.provider.inspections().length, 1);
+    assert.equal(
+      configured.provider.inspections()[0]?.requestedOutputTokens,
+      2_000,
+    );
+    assert.equal(
+      configured.client.configuration.requestTimeoutMs,
+      LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS,
+    );
     assert.equal(
       configured.provider.inspections()[0]?.responseFormat,
       "json_schema",

@@ -12,7 +12,9 @@ import {
   importLocatorDiagnosisObservation,
   inspectLocatorAdvisoryRerankingOutput,
   LOCATOR_ADVISORY_RERANKING_CAPABILITY,
+  LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
   LOCATOR_ADVISORY_RERANKING_PROMPT_VERSION,
+  LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS,
   MockAiProvider,
   rankLocatorCandidates,
   renderLocatorAdvisoryComparisonMarkdown,
@@ -134,7 +136,7 @@ function client(output: Readonly<Record<string, unknown>>): AiClient {
       requestTimeoutMs: 1_000,
       maxRetries: 0,
       maxInputCharacters: 30_000,
-      maxOutputTokens: 512,
+      maxOutputTokens: LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
     }),
     {
       providers: [new MockAiProvider({ structuredOutput: output })],
@@ -192,6 +194,7 @@ class CapturingProvider implements AiProvider {
         usage: Object.freeze({
           inputTokens: 20,
           outputTokens: 10,
+          reasoningTokens: 8,
           totalTokens: 30,
         }),
         finishReason: "stop",
@@ -206,9 +209,13 @@ class FailingProvider implements AiProvider {
   public readonly id = "mock";
   public readonly networkAccess = "none" as const;
   public readonly requiresApiKey = false;
-  private readonly code: "provider-timeout" | "provider-unavailable";
+  private readonly code:
+    "provider-output-truncated" | "provider-timeout" | "provider-unavailable";
 
-  public constructor(code: "provider-timeout" | "provider-unavailable") {
+  public constructor(
+    code:
+      "provider-output-truncated" | "provider-timeout" | "provider-unavailable",
+  ) {
     this.code = code;
   }
 
@@ -223,7 +230,8 @@ class FailingProvider implements AiProvider {
 }
 
 function failingClient(
-  code: "provider-timeout" | "provider-unavailable",
+  code:
+    "provider-output-truncated" | "provider-timeout" | "provider-unavailable",
 ): AiClient {
   return createAiClient(
     defaultAiConfiguration({
@@ -236,7 +244,7 @@ function failingClient(
       requestTimeoutMs: 1_000,
       maxRetries: 0,
       maxInputCharacters: 30_000,
-      maxOutputTokens: 512,
+      maxOutputTokens: LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
     }),
     {
       providers: [new FailingProvider(code)],
@@ -355,7 +363,7 @@ await describe("blind advisory execution isolation", async () => {
         requestTimeoutMs: 1_000,
         maxRetries: 0,
         maxInputCharacters: 30_000,
-        maxOutputTokens: 512,
+        maxOutputTokens: LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
       }),
       { providers: [provider], environment: Object.freeze({}) },
     );
@@ -364,6 +372,10 @@ await describe("blind advisory execution isolation", async () => {
       { mode: "mock-ai", aiClientFactory: () => aiClient },
     );
     assert.ok(provider.request);
+    assert.equal(
+      provider.request.maxOutputTokens,
+      LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
+    );
     assert.equal(provider.request.responseFormat.type, "json_schema");
     assert.equal(provider.request.responseFormat.strict, true);
     assert.equal(
@@ -375,6 +387,193 @@ await describe("blind advisory execution isolation", async () => {
     assert.doesNotMatch(
       serialized,
       /LOCATOR-\d{3}|"deterministicScore"|"stability"|"reviewerRationale"|"expectedClassification"|"expectedRecommendationStatus"|"acceptableCandidateIds"|"preferredCandidateIds"|"forbiddenCandidateIds"|"originalCandidateId"|API[_-]?KEY|authorization|<html|innerHTML|outerHTML|C:\\Users|\/home\//u,
+    );
+  });
+
+  await it("enforces the shared output and timeout caps while allowing smaller caller limits", async () => {
+    assert.equal(LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS, 2_000);
+    assert.equal(LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS, 15_000);
+    const value = await observation();
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const alias = artifacts.packet.candidates[0]?.blindCandidateId;
+    assert.ok(alias);
+    for (const [configuredLimit, expectedLimit] of [
+      [2_000, 2_000],
+      [750, 750],
+      [4_000, 2_000],
+    ] as const) {
+      const provider: CapturingProvider = new CapturingProvider(
+        output([alias]),
+      );
+      const aiClient = createAiClient(
+        defaultAiConfiguration({
+          enabled: true,
+          provider: "mock",
+          model: "capture-v1",
+          allowNetworkCalls: false,
+          mockOnly: true,
+          enabledCapabilities: [LOCATOR_ADVISORY_RERANKING_CAPABILITY],
+          requestTimeoutMs: 30_000,
+          maxRetries: 0,
+          maxInputCharacters: 30_000,
+          maxOutputTokens: configuredLimit,
+        }),
+        { providers: [provider], environment: Object.freeze({}) },
+      );
+      await runLocatorAdvisoryComparisonPhase(
+        [{ observation: value, packet: artifacts.packet }],
+        { mode: "mock-ai", aiClientFactory: () => aiClient },
+      );
+      assert.ok(provider.request);
+      assert.equal(provider.request.maxOutputTokens, expectedLimit);
+      assert.equal(provider.request.timeoutMs, 15_000);
+    }
+  });
+
+  await it("uses the bounded advisory allowance in the approximate cost guard", async () => {
+    const value = await observation();
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const alias = artifacts.packet.candidates[0]?.blindCandidateId;
+    assert.ok(alias);
+    const provider = new CapturingProvider(output([alias]));
+    const aiClient = createAiClient(
+      defaultAiConfiguration({
+        enabled: true,
+        provider: "mock",
+        model: "capture-v1",
+        allowNetworkCalls: false,
+        mockOnly: true,
+        enabledCapabilities: [LOCATOR_ADVISORY_RERANKING_CAPABILITY],
+        requestTimeoutMs: LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS,
+        maxRetries: 0,
+        maxInputCharacters: 30_000,
+        maxOutputTokens: LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
+        maxEstimatedCostUsd: 0.001_5,
+      }),
+      {
+        providers: [provider],
+        environment: Object.freeze({}),
+        pricing: {
+          inputCostPerMillionTokens: 0,
+          outputCostPerMillionTokens: 1,
+        },
+      },
+    );
+    const phase = await runLocatorAdvisoryComparisonPhase(
+      [{ observation: value, packet: artifacts.packet }],
+      { mode: "mock-ai", aiClientFactory: () => aiClient },
+    );
+    assert.equal(provider.request, undefined);
+    assert.equal(phase.cases[0]?.execution?.errorCode, "request-blocked");
+  });
+
+  await it("does not double-count reasoning tokens already included in output usage", async () => {
+    const value = await observation();
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const alias = artifacts.packet.candidates[0]?.blindCandidateId;
+    assert.ok(alias);
+    const provider = new CapturingProvider(output([alias]));
+    const aiClient = createAiClient(
+      defaultAiConfiguration({
+        enabled: true,
+        provider: "mock",
+        model: "capture-v1",
+        allowNetworkCalls: false,
+        mockOnly: true,
+        enabledCapabilities: [LOCATOR_ADVISORY_RERANKING_CAPABILITY],
+        requestTimeoutMs: LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS,
+        maxRetries: 0,
+        maxInputCharacters: 30_000,
+        maxOutputTokens: LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
+      }),
+      {
+        providers: [provider],
+        environment: Object.freeze({}),
+        pricing: {
+          inputCostPerMillionTokens: 2,
+          outputCostPerMillionTokens: 3,
+        },
+      },
+    );
+    const phase = await runLocatorAdvisoryComparisonPhase(
+      [{ observation: value, packet: artifacts.packet }],
+      { mode: "mock-ai", aiClientFactory: () => aiClient },
+    );
+    const [phaseCase] = phase.cases;
+    assert.ok(phaseCase);
+    const execution = phaseCase.execution;
+    assert.ok(execution);
+    const { usage } = execution;
+    assert.ok(usage);
+    assert.equal(usage.reasoningTokens, 8);
+    assert.equal(usage.outputTokens, 10);
+    assert.equal(execution.approximateCostUsd, 0.000_07);
+  });
+
+  await it("keeps truncated advisory output unavailable without parsing partial content", async () => {
+    const value = await observation();
+    const artifacts = createLocatorBlindReviewArtifacts(value);
+    const phase = await runLocatorAdvisoryComparisonPhase(
+      [{ observation: value, packet: artifacts.packet }],
+      {
+        mode: "mock-ai",
+        aiClientFactory: () => failingClient("provider-output-truncated"),
+      },
+    );
+    const [phaseCase] = phase.cases;
+    assert.ok(phaseCase);
+    const execution = phaseCase.execution;
+    assert.ok(execution);
+    assert.equal(execution.status, "failed");
+    assert.equal(execution.errorCode, "provider-output-truncated");
+    assert.equal(execution.output, undefined);
+  });
+
+  await it("issues exactly one bounded request for each of five eligible cases", async () => {
+    const records = await Promise.all(
+      Array.from({ length: 5 }, async (_, index) => {
+        const value = await observation(index + 1);
+        const artifacts = createLocatorBlindReviewArtifacts(value);
+        return Object.freeze({ observation: value, packet: artifacts.packet });
+      }),
+    );
+    const providers: CapturingProvider[] = [];
+    const phase = await runLocatorAdvisoryComparisonPhase(records, {
+      mode: "mock-ai",
+      aiClientFactory: (input) => {
+        const alias = input.candidates[0]?.candidateId;
+        assert.ok(alias);
+        const provider = new CapturingProvider(output([alias]));
+        providers.push(provider);
+        return createAiClient(
+          defaultAiConfiguration({
+            enabled: true,
+            provider: "mock",
+            model: "capture-v1",
+            allowNetworkCalls: false,
+            mockOnly: true,
+            enabledCapabilities: [LOCATOR_ADVISORY_RERANKING_CAPABILITY],
+            requestTimeoutMs: LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS,
+            maxRetries: 0,
+            maxInputCharacters: 30_000,
+            maxOutputTokens: LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
+          }),
+          { providers: [provider], environment: Object.freeze({}) },
+        );
+      },
+    });
+    assert.equal(phase.cases.length, 5);
+    assert.equal(providers.length, 5);
+    assert.ok(providers.every(({ request }) => request !== undefined));
+    assert.ok(
+      providers.every(
+        ({ request }) =>
+          request?.maxOutputTokens ===
+          LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
+      ),
+    );
+    assert.ok(
+      phase.cases.every(({ execution }) => execution?.retryCount === 0),
     );
   });
 

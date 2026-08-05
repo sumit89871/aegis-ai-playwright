@@ -11,7 +11,9 @@ import type {
 import {
   buildLocatorAdvisoryRerankingInput,
   LOCATOR_ADVISORY_RERANKING_CAPABILITY,
+  LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
   LOCATOR_ADVISORY_RERANKING_SCHEMA_VERSION,
+  LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS,
   runLocatorAdvisoryReranking,
 } from "../locator-diagnosis/locator-advisory-reranking.ts";
 import type {
@@ -205,10 +207,10 @@ function defaultMockClient(input: LocatorAdvisoryRerankingInput): AiClient {
       allowNetworkCalls: false,
       mockOnly: true,
       enabledCapabilities: [LOCATOR_ADVISORY_RERANKING_CAPABILITY],
-      requestTimeoutMs: 15_000,
+      requestTimeoutMs: LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS,
       maxRetries: 1,
       maxInputCharacters: 30_000,
-      maxOutputTokens: 512,
+      maxOutputTokens: LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
       defaultTemperature: 0,
     }),
     {

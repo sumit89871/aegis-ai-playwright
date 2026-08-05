@@ -133,8 +133,18 @@ await describe("AI foundation security invariants", async () => {
     const rootPackage = read("package.json");
     const workflows = `${read(".github/workflows/framework-ci.yml")}\n${read(".github/workflows/reference-consumer-ci.yml")}`;
     assert.match(command, /--confirm-network/u);
-    assert.match(command, /maxOutputTokens:\s*512/u);
-    assert.match(command, /requestTimeoutMs:\s*15_000/u);
+    assert.match(
+      command,
+      /maxOutputTokens:\s*LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS/u,
+    );
+    assert.match(
+      command,
+      /requestTimeoutMs:\s*LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS/u,
+    );
+    assert.match(
+      reranker,
+      /LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS\s*=\s*2_000/u,
+    );
     assert.match(command, /maxEstimatedCostUsd:\s*0\.01/u);
     assert.match(prompt, /Rank only candidate IDs supplied/u);
     assert.doesNotMatch(

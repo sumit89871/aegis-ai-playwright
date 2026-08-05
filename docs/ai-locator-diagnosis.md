@@ -62,6 +62,8 @@ Run the offline comparison with `npm run ai:locator:holdout:compare -- --mode=mo
 
 The `locator-advisory-reranking` prompt is version `1.1.0`; its output schema remains version `1.0.0`. It explicitly names all five fields, allowed recommendation and confidence values, candidate-array status rules, and the 500-character summary bound. OpenRouter also receives a strict per-request JSON Schema whose candidate enum contains only that request's neutral aliases. Provider enforcement is not trusted alone: the TypeScript validator still rejects unknown or duplicate aliases, extra fields, invalid status relationships, and unsafe summary content.
 
+The advisory generation allowance is bounded at 2,000 tokens so reasoning-capable models have room for hidden reasoning and the final structured object. It is not a visible-response allowance: the five-field schema and 500-character summary limit are unchanged. The timeout remains 15 seconds, and both timeouts and truncation fail closed. Live comparisons should use a currently reliable model, but Aegis has no model-specific budget, does not claim the allowance guarantees success, and does not turn a successful response into locator execution or healing.
+
 Use this live order only after offline validation:
 
 ```text
