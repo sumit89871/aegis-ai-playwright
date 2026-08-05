@@ -175,8 +175,8 @@ await describe("OpenRouter AI provider", async () => {
       apiKey: "synthetic-test-key",
     });
     assert.equal(authorization, "Bearer synthetic-test-key");
-    assert.equal(requestBody.max_completion_tokens, 100);
-    assert.equal(requestBody.max_tokens, undefined);
+    assert.equal(requestBody.max_tokens, 100);
+    assert.equal(requestBody.max_completion_tokens, undefined);
     assert.deepEqual(requestBody.reasoning, {
       effort: "none",
       exclude: true,
@@ -185,6 +185,26 @@ await describe("OpenRouter AI provider", async () => {
     assert.equal(requestBody.provider, undefined);
     assert.equal(result.text, '{"result":"ok"}');
     assert.doesNotMatch(JSON.stringify(result), /synthetic-test-key/u);
+  });
+
+  await it("maps the provider-neutral output limit to the broadly routed OpenRouter max_tokens parameter", async () => {
+    let requestBody: Readonly<Record<string, unknown>> = Object.freeze({});
+    const server = await startServer(async (request, response) => {
+      requestBody = await readJsonRequest(request);
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(completionBody());
+    });
+    assert.equal(providerRequest.maxOutputTokens, 100);
+    await new OpenRouterAiProvider().generate(providerRequest, {
+      endpoint: server.endpoint,
+      apiKey: "synthetic-test-key",
+    });
+    assert.equal(requestBody.max_tokens, 100);
+    assert.equal(requestBody.max_completion_tokens, undefined);
+    assert.equal(requestBody.model, providerRequest.model);
+    assert.equal(requestBody.temperature, providerRequest.temperature);
+    assert.deepEqual(requestBody.reasoning, { effort: "none", exclude: true });
+    assert.deepEqual(requestBody.response_format, { type: "json_object" });
   });
 
   await it("maps strict JSON Schema and requires compatible provider parameters", async () => {
@@ -214,6 +234,8 @@ await describe("OpenRouter AI provider", async () => {
         schema: strictSchema,
       },
     });
+    assert.equal(requestBody.max_tokens, 100);
+    assert.equal(requestBody.max_completion_tokens, undefined);
     assert.deepEqual(requestBody.provider, { require_parameters: true });
   });
 
