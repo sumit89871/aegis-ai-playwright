@@ -33,7 +33,7 @@ export { LOCATOR_ADVISORY_RERANKING_SCHEMA_VERSION } from "./locator-advisory-re
 
 export const LOCATOR_ADVISORY_RERANKING_CAPABILITY = "ui-locator-reranking";
 export const LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS = 2_000;
-export const LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS = 15_000;
+export const LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS = 30_000;
 export const LOCATOR_ADVISORY_RERANKING_MAX_RETRIES = 1;
 
 export interface LocatorAdvisoryRerankingCandidate {
@@ -535,7 +535,7 @@ export async function runLocatorAdvisoryReranking(
         ? { returnedModel: error.responseMetadata.returnedModel }
         : {}),
       durationMs: Math.max(Date.now() - startedAt, 0),
-      retryCount: 0,
+      retryCount: error instanceof AiError ? (error.retryCount ?? 0) : 0,
       errorCode: error instanceof AiError ? error.code : "advisory-failure",
       ...(error instanceof AiError &&
       error.responseMetadata?.finishReason !== undefined

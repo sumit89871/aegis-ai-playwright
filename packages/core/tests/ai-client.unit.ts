@@ -124,6 +124,34 @@ await describe("AI client", async () => {
     assert.deepEqual(delays, [250]);
   });
 
+  await it("preserves the retry count when every transient attempt fails", async () => {
+    const delays: number[] = [];
+    const provider = new MockAiProvider({
+      transientFailuresBeforeSuccess: 2,
+    });
+    await assert.rejects(
+      createAiClient(
+        defaultAiConfiguration({
+          ...enabledMockConfiguration(),
+          maxRetries: 1,
+        }),
+        {
+          providers: [provider],
+          delay: (milliseconds) => {
+            delays.push(milliseconds);
+            return Promise.resolve();
+          },
+        },
+      ).generate(request),
+      (error: unknown) =>
+        error instanceof AiError &&
+        error.code === "provider-unavailable" &&
+        error.retryCount === 1,
+    );
+    assert.deepEqual(delays, [250]);
+    assert.equal(provider.inspections().length, 2);
+  });
+
   await it("preserves a permanent provider failure", async () => {
     await assert.rejects(
       createAiClient(enabledMockConfiguration(), {

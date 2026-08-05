@@ -224,6 +224,9 @@ class FailingProvider implements AiProvider {
       new AiError({
         code: this.code,
         message: "Synthetic provider failure.",
+        transient:
+          this.code === "provider-timeout" ||
+          this.code === "provider-unavailable",
       }),
     );
   }
@@ -232,6 +235,7 @@ class FailingProvider implements AiProvider {
 function failingClient(
   code:
     "provider-output-truncated" | "provider-timeout" | "provider-unavailable",
+  maxRetries = 0,
 ): AiClient {
   return createAiClient(
     defaultAiConfiguration({
@@ -242,13 +246,14 @@ function failingClient(
       mockOnly: true,
       enabledCapabilities: [LOCATOR_ADVISORY_RERANKING_CAPABILITY],
       requestTimeoutMs: 1_000,
-      maxRetries: 0,
+      maxRetries,
       maxInputCharacters: 30_000,
       maxOutputTokens: LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
     }),
     {
       providers: [new FailingProvider(code)],
       environment: Object.freeze({}),
+      delay: () => Promise.resolve(),
     },
   );
 }
@@ -392,7 +397,7 @@ await describe("blind advisory execution isolation", async () => {
 
   await it("enforces the shared output and timeout caps while allowing smaller caller limits", async () => {
     assert.equal(LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS, 2_000);
-    assert.equal(LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS, 15_000);
+    assert.equal(LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS, 30_000);
     const value = await observation();
     const artifacts = createLocatorBlindReviewArtifacts(value);
     const alias = artifacts.packet.candidates[0]?.blindCandidateId;
@@ -426,7 +431,42 @@ await describe("blind advisory execution isolation", async () => {
       );
       assert.ok(provider.request);
       assert.equal(provider.request.maxOutputTokens, expectedLimit);
-      assert.equal(provider.request.timeoutMs, 15_000);
+      assert.equal(provider.request.timeoutMs, 30_000);
+    }
+
+    for (const [configuredTimeout, expectedTimeout] of [
+      [30_000, 30_000],
+      [10_000, 10_000],
+      [60_000, 30_000],
+    ] as const) {
+      const provider: CapturingProvider = new CapturingProvider(
+        output([alias]),
+      );
+      const aiClient = createAiClient(
+        defaultAiConfiguration({
+          enabled: true,
+          provider: "mock",
+          model: "capture-v1",
+          allowNetworkCalls: false,
+          mockOnly: true,
+          enabledCapabilities: [LOCATOR_ADVISORY_RERANKING_CAPABILITY],
+          requestTimeoutMs: configuredTimeout,
+          maxRetries: 0,
+          maxInputCharacters: 30_000,
+          maxOutputTokens: LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
+        }),
+        { providers: [provider], environment: Object.freeze({}) },
+      );
+      await runLocatorAdvisoryComparisonPhase(
+        [{ observation: value, packet: artifacts.packet }],
+        { mode: "mock-ai", aiClientFactory: () => aiClient },
+      );
+      assert.ok(provider.request);
+      assert.equal(provider.request.timeoutMs, expectedTimeout);
+      assert.equal(
+        provider.request.maxOutputTokens,
+        LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
+      );
     }
   });
 
@@ -824,6 +864,59 @@ await describe("deterministic versus advisory comparison", async () => {
       "provider-unavailable": 1,
     });
     assert.equal(comparison.effectiveMode, "ai-unavailable");
+  });
+
+  await it("reports failed timeout retries and operation-level latency accurately", async () => {
+    const first = await observation(1);
+    const second = await observation(2);
+    const firstArtifacts = createLocatorBlindReviewArtifacts(first);
+    const secondArtifacts = createLocatorBlindReviewArtifacts(second);
+    const phase = await runLocatorAdvisoryComparisonPhase(
+      [
+        { observation: first, packet: firstArtifacts.packet },
+        { observation: second, packet: secondArtifacts.packet },
+      ],
+      {
+        mode: "mock-ai",
+        aiClientFactory: (input, index) => {
+          const candidateId = input.candidates[0]?.candidateId;
+          assert.ok(candidateId);
+          return index === 0
+            ? client(output([candidateId]))
+            : failingClient("provider-timeout", 1);
+        },
+      },
+    );
+    const timeoutExecution = phase.cases.find(
+      ({ execution }) => execution?.status === "timeout",
+    )?.execution;
+    assert.ok(timeoutExecution);
+    assert.equal(timeoutExecution.retryCount, 1);
+    assert.equal(timeoutExecution.errorCode, "provider-timeout");
+    assert.equal(timeoutExecution.output, undefined);
+    const comparison = await completeLocatorAdvisoryComparison(phase, [
+      answerRecord(
+        first,
+        firstArtifacts,
+        completedReview(firstArtifacts, "LOCATOR-001", []),
+      ),
+      answerRecord(
+        second,
+        secondArtifacts,
+        completedReview(secondArtifacts, "LOCATOR-001", []),
+      ),
+    ]);
+    assert.equal(comparison.effectiveMode, "partial-ai-advisory");
+    assert.equal(comparison.provider.requestCount, 2);
+    assert.equal(comparison.provider.successfulRequestCount, 1);
+    assert.equal(comparison.provider.failedRequestCount, 1);
+    assert.equal(comparison.provider.retryCount, 1);
+    assert.ok(Number.isFinite(comparison.provider.aggregateLatencyMs));
+    assert.ok(comparison.provider.aggregateLatencyMs >= 0);
+    assert.equal(
+      comparison.provider.meanLatencyMs,
+      comparison.provider.aggregateLatencyMs / 2,
+    );
   });
 
   await it("contains aggregate-only public terminal and Markdown reports", async () => {

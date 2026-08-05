@@ -135,7 +135,7 @@ await describe("locator advisory synthetic verifier CLI", async () => {
     );
     assert.match(
       reranker,
-      /LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS\s*=\s*15_000/u,
+      /LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS\s*=\s*30_000/u,
     );
     assert.match(script, /renderLocatorAdvisoryVerificationResult/u);
     assert.match(provider, /reasoning: \{ exclude: true \}/u);

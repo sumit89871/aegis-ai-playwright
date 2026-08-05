@@ -61,6 +61,25 @@ function retryDelay(error: AiError, retryNumber: number): number {
   return Math.min(250 * 2 ** Math.max(retryNumber - 1, 0), 10_000);
 }
 
+function withRetryCount(error: AiError, retryCount: number): AiError {
+  return new AiError({
+    code: error.code,
+    message: error.message,
+    transient: error.transient,
+    retryCount,
+    ...(error.retryAfterMs === undefined
+      ? {}
+      : { retryAfterMs: error.retryAfterMs }),
+    ...(error.httpStatus === undefined ? {} : { httpStatus: error.httpStatus }),
+    ...(error.responseMetadata === undefined
+      ? {}
+      : { responseMetadata: error.responseMetadata }),
+    ...(error.validationErrors === undefined
+      ? {}
+      : { validationErrors: error.validationErrors }),
+  });
+}
+
 function validateClientRequest(
   request: AiClientRequest,
   configuration: AiConfiguration,
@@ -378,7 +397,7 @@ export function createAiClient(
                 retryNumber: retryCount,
                 errorCode: safeError.code,
               });
-              throw safeError;
+              throw withRetryCount(safeError, retryCount);
             }
             retryCount += 1;
             recorder.emit({

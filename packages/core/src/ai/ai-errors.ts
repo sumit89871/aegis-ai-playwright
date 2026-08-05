@@ -61,6 +61,7 @@ export interface AiProviderResponseMetadata {
 export class AiError extends Error {
   public readonly code: AiErrorCode;
   public readonly transient: boolean;
+  public readonly retryCount?: number;
   public readonly retryAfterMs?: number;
   public readonly httpStatus?: number;
   public readonly responseMetadata?: AiProviderResponseMetadata;
@@ -70,6 +71,7 @@ export class AiError extends Error {
     readonly code: AiErrorCode;
     readonly message: string;
     readonly transient?: boolean;
+    readonly retryCount?: number;
     readonly retryAfterMs?: number;
     readonly httpStatus?: number;
     readonly responseMetadata?: AiProviderResponseMetadata;
@@ -79,6 +81,9 @@ export class AiError extends Error {
     this.name = "AiError";
     this.code = options.code;
     this.transient = options.transient ?? false;
+    if (options.retryCount !== undefined) {
+      this.retryCount = options.retryCount;
+    }
     if (options.retryAfterMs !== undefined) {
       this.retryAfterMs = options.retryAfterMs;
     }

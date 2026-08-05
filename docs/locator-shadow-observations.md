@@ -103,7 +103,7 @@ Provider failure, timeout, rate limiting, and rejected structured output are rep
 
 Live locator advisory uses strict JSON Schema with provider capability filtering; it never silently retries through weaker generic JSON mode. The public comparison report may show aggregate validation issue categories such as `unsupported-field` or `unknown-candidate-id` when invalid output occurs. It never shows the provider value, candidate alias, case ID, prompt, raw response, mapping, or reviewer data. Verify the live contract first with `npm run ai:locator:reranking:verify -- --confirm-network`; that command uses synthetic compiled evidence and reads none of these ignored artifacts.
 
-The shared live advisory configuration caps generation at 2,000 tokens and 15 seconds. The token allowance includes hidden reasoning but does not expand the strict five-field output or 500-character summary. Truncation and timeouts remain unavailable advisory results rather than partial answers, and no extra provider metadata request, model-specific budget, locator application, or healing occurs.
+The shared live advisory configuration caps generation at 2,000 tokens and provider latency at 30 seconds. Both values match global defaults; callers may configure smaller values through the existing bounded minimum. The token allowance includes hidden reasoning but does not expand the strict five-field output or 500-character summary. Truncation and timeouts remain unavailable advisory results rather than partial answers, retry policy remains unchanged, and no extra provider metadata request, model-specific limit, locator application, or healing occurs.
 
 ## Terminal output modes
 

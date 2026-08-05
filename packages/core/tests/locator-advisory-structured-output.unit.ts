@@ -177,7 +177,7 @@ await describe("locator advisory strict structured output", async () => {
 
   await it("uses strict schema and completes a valid synthetic verification", async () => {
     assert.equal(LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS, 2_000);
-    assert.equal(LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS, 15_000);
+    assert.equal(LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS, 30_000);
     const configured = client(output());
     const verification = await verifyLocatorAdvisoryStructuredOutput(
       configured.client,
@@ -194,6 +194,10 @@ await describe("locator advisory strict structured output", async () => {
     assert.equal(
       configured.provider.inspections()[0]?.requestedOutputTokens,
       2_000,
+    );
+    assert.equal(
+      configured.provider.inspections()[0]?.requestedTimeoutMs,
+      30_000,
     );
     assert.equal(
       configured.client.configuration.requestTimeoutMs,
@@ -221,6 +225,36 @@ await describe("locator advisory strict structured output", async () => {
       rendered,
       /BLIND-CANDIDATE-|LOCATOR-|summary|raw response|prompt:|C:\\Users|\/home\//u,
     );
+  });
+
+  await it("fails a timed-out synthetic verification closed without retrying or parsing output", async () => {
+    const provider = new MockAiProvider({ failureMode: "timeout" });
+    const configured = createAiClient(
+      defaultAiConfiguration({
+        enabled: true,
+        provider: "mock",
+        model: "mock-locator-timeout-v1",
+        allowNetworkCalls: false,
+        mockOnly: true,
+        enabledCapabilities: [LOCATOR_ADVISORY_RERANKING_CAPABILITY],
+        requestTimeoutMs: LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS,
+        maxRetries: 0,
+        maxInputCharacters: 30_000,
+        maxOutputTokens: LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS,
+        defaultTemperature: 0,
+      }),
+      { providers: [provider] },
+    );
+    const verification =
+      await verifyLocatorAdvisoryStructuredOutput(configured);
+    assert.equal(provider.inspections().length, 1);
+    assert.equal(verification.status, "fail");
+    assert.equal(verification.errorCode, "provider-timeout");
+    assert.equal(verification.retryCount, 0);
+    assert.equal(verification.suppliedIdValidation, "not-completed");
+    assert.equal(verification.typescriptBusinessValidation, "not-completed");
+    assert.equal(verification.locatorApplications, 0);
+    assert.equal(verification.automaticHealing, false);
   });
 
   await it("renders invalid synthetic verification using safe categories only", async () => {

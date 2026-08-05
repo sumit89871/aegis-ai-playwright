@@ -25,6 +25,7 @@ export interface MockAiRequestInspection {
   readonly messageCount: number;
   readonly inputCharacterCount: number;
   readonly requestedOutputTokens: number;
+  readonly requestedTimeoutMs: number;
   readonly responseFormat: "text" | "json_object" | "json_schema";
   readonly metadata: Readonly<Record<string, string>>;
 }
@@ -110,6 +111,7 @@ export class MockAiProvider implements AiProvider {
         messageCount: request.messages.length,
         inputCharacterCount,
         requestedOutputTokens: request.maxOutputTokens,
+        requestedTimeoutMs: request.timeoutMs,
         responseFormat: request.responseFormat.type,
         metadata: Object.freeze({
           ...(request.metadata?.correlationId === undefined

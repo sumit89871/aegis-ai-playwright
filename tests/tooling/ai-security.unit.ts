@@ -145,6 +145,10 @@ await describe("AI foundation security invariants", async () => {
       reranker,
       /LOCATOR_ADVISORY_RERANKING_MAX_OUTPUT_TOKENS\s*=\s*2_000/u,
     );
+    assert.match(
+      reranker,
+      /LOCATOR_ADVISORY_RERANKING_TIMEOUT_MS\s*=\s*30_000/u,
+    );
     assert.match(command, /maxEstimatedCostUsd:\s*0\.01/u);
     assert.match(prompt, /Rank only candidate IDs supplied/u);
     assert.doesNotMatch(
